@@ -6,9 +6,8 @@ import { handleFile } from "./file.js";
 import { query } from "../database/supabase.js";
 import { isAdmin } from "../utils/admin.js";
 import { setState } from "../utils/stateDb.js";
-import { inlineKeyboard } from "../keyboards/inlineKeyboard.js";
 
-// ================= CHECK JOIN (SAFE VERSION) =================
+// ================= SAFE JOIN CHECK =================
 async function checkJoin(env, telegramId) {
   try {
     const channels = await query(env, "required_channels", "GET");
@@ -16,11 +15,18 @@ async function checkJoin(env, telegramId) {
     if (!channels || channels.length === 0) return true;
 
     for (const ch of channels) {
+      const chatId = String(ch.channel_username || "").trim();
+
+      if (!chatId) return false;
+
       const res = await fetch(
-        `https://api.telegram.org/bot${env.BOT_TOKEN}/getChatMember?chat_id=${ch.channel_username}&user_id=${telegramId}`
+        `https://api.telegram.org/bot${env.BOT_TOKEN}/getChatMember?chat_id=${chatId}&user_id=${telegramId}`
       );
 
       const data = await res.json();
+
+      // Debug (optional)
+      console.log("JOIN CHECK:", chatId, data);
 
       if (!data?.ok) return false;
 
@@ -32,7 +38,9 @@ async function checkJoin(env, telegramId) {
     }
 
     return true;
-  } catch (e) {
+
+  } catch (err) {
+    console.log("CHECK JOIN ERROR:", err);
     return false;
   }
 }
@@ -43,44 +51,36 @@ export async function handleCallback(env, callback) {
   const telegramId = callback.from?.id;
   const data = callback.data;
 
-  // IMPORTANT: always respond to Telegram flow
-  const safeReply = (msg, keyboard) => {
-    return sendMessage(env, chatId, msg, keyboard);
-  };
+  const reply = (msg, kb) => sendMessage(env, chatId, msg, kb);
 
   // ================= VERIFY JOIN =================
   if (data === "verify_join") {
-    try {
-      const ok = await checkJoin(env, telegramId);
+    const ok = await checkJoin(env, telegramId);
 
-      if (!ok) {
-        return await safeReply(
-          "❌ You have not joined all channels yet.\nPlease join and try again."
-        );
-      }
-
-      await query(
-        env,
-        "users",
-        "PATCH",
-        { is_verified: true },
-        `?telegram_id=eq.${telegramId}`
+    if (!ok) {
+      return await reply(
+        "❌ You have not joined all channels yet.\nPlease join them and try again."
       );
-
-      return await safeReply(
-        "✅ Verified Successfully!\n\n🎉 Main Menu:",
-        {
-          inline_keyboard: [
-            [{ text: "📂 Browse Files", callback_data: "browse" }],
-            [{ text: "💰 Credits", callback_data: "credits" }],
-            [{ text: "👥 Referral", callback_data: "referral" }]
-          ]
-        }
-      );
-
-    } catch (err) {
-      return await safeReply("❌ Verification failed. Try again.");
     }
+
+    await query(
+      env,
+      "users",
+      "PATCH",
+      { is_verified: true },
+      `?telegram_id=eq.${telegramId}`
+    );
+
+    return await reply(
+      "✅ Verified Successfully!\n\n🎉 Main Menu:",
+      {
+        inline_keyboard: [
+          [{ text: "📂 Browse Files", callback_data: "browse" }],
+          [{ text: "💰 Credits", callback_data: "credits" }],
+          [{ text: "👥 Referral", callback_data: "referral" }]
+        ]
+      }
+    );
   }
 
   // ================= USER CHECK =================
@@ -95,7 +95,7 @@ export async function handleCallback(env, callback) {
   const user = userRes?.[0];
 
   if (user && !user.is_verified && data !== "verify_join") {
-    return await safeReply("🚫 Please join channels and verify first.");
+    return await reply("🚫 Please join channels and verify first.");
   }
 
   // ================= BROWSE =================
@@ -110,12 +110,7 @@ export async function handleCallback(env, callback) {
 
   // ================= FILE =================
   if (data.startsWith("file_")) {
-    return await handleFile(
-      env,
-      chatId,
-      data.replace("file_", ""),
-      telegramId
-    );
+    return await handleFile(env, chatId, data.replace("file_", ""), telegramId);
   }
 
   // ================= UNLOCK =================
@@ -125,55 +120,55 @@ export async function handleCallback(env, callback) {
     const fileRes = await query(env, "files", "GET", null, `?id=eq.${fileId}`);
     const file = fileRes?.[0];
 
-    if (!file) return await safeReply("❌ File not found");
+    if (!file) return await reply("❌ File not found");
 
     const credits = await getCredits(env, telegramId);
 
     if (credits < file.price) {
-      return await safeReply("❌ Not enough credits");
+      return await reply("❌ Not enough credits");
     }
 
     await addCredits(env, telegramId, -file.price);
 
-    return await safeReply(
+    return await reply(
       `✅ Unlocked!\n\n📄 ${file.title}\n🔗 ${file.file_url}`
     );
   }
 
   // ================= ADMIN =================
   if (data === "admin_add_category") {
-    if (!isAdmin(env, telegramId)) return await safeReply("❌ Access denied");
+    if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
 
     await setState(env, telegramId, "add_category");
-    return await safeReply("✏️ Send category name:");
+    return await reply("✏️ Send category name:");
   }
 
   if (data === "admin_add_file") {
-    if (!isAdmin(env, telegramId)) return await safeReply("❌ Access denied");
+    if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
 
     const categories = await query(env, "categories", "GET");
 
     if (!categories?.length) {
-      return await safeReply("❌ No categories found.");
+      return await reply("❌ No categories found.");
     }
 
     const buttons = categories.map(c => ([
       { text: c.name, callback_data: `choosecat_${c.id}` }
     ]));
 
-    return await safeReply("📁 Choose category:", {
+    return await reply("📁 Choose category:", {
       inline_keyboard: buttons
     });
   }
 
   if (data.startsWith("choosecat_")) {
     await setState(env, telegramId, `add_file_${data.replace("choosecat_", "")}`);
-    return await safeReply("📎 Now send the file.");
+    return await reply("📎 Now send the file.");
   }
 
   // ================= DELETE =================
   if (data === "admin_delete_category") {
-    if (!isAdmin(env, telegramId)) return await safeReply("❌ Access denied");
+    if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
 
     const categories = await query(env, "categories", "GET");
 
@@ -181,13 +176,13 @@ export async function handleCallback(env, callback) {
       { text: `🗑 ${c.name}`, callback_data: `deletecat_${c.id}` }
     ]));
 
-    return await safeReply("Select category:", {
+    return await reply("Select category:", {
       inline_keyboard: buttons
     });
   }
 
   if (data.startsWith("deletecat_")) {
-    return await safeReply(
+    return await reply(
       "⚠️ Confirm delete?",
       {
         inline_keyboard: [
@@ -206,22 +201,22 @@ export async function handleCallback(env, callback) {
     await query(env, "files", "DELETE", null, `?category_id=eq.${id}`);
     await query(env, "categories", "DELETE", null, `?id=eq.${id}`);
 
-    return await safeReply("✅ Deleted successfully.");
+    return await reply("✅ Deleted successfully.");
   }
 
   if (data === "cancel_delete") {
-    return await safeReply("❌ Cancelled.");
+    return await reply("❌ Cancelled.");
   }
 
   // ================= STATS =================
   if (data === "admin_stats") {
-    if (!isAdmin(env, telegramId)) return await safeReply("❌ Access denied");
+    if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
 
     const users = await query(env, "users", "GET");
     const categories = await query(env, "categories", "GET");
     const files = await query(env, "files", "GET");
 
-    return await safeReply(
+    return await reply(
       `📊 Stats\n\n👤 Users: ${users.length}\n📁 Categories: ${categories.length}\n📄 Files: ${files.length}`
     );
   }
@@ -229,8 +224,8 @@ export async function handleCallback(env, callback) {
   // ================= CREDITS =================
   if (data === "credits") {
     const c = await getCredits(env, telegramId);
-    return await safeReply(`💰 Credits: ${c}`);
+    return await reply(`💰 Credits: ${c}`);
   }
 
-  return await safeReply("❌ Unknown action");
-}
+  return await reply("❌ Unknown action");
+      }
