@@ -2,12 +2,28 @@ import { sendMessage } from "../services/telegram.js";
 import { getCredits, addCredits } from "../services/users.js";
 import { handleBrowse } from "./browse.js";
 import { handleCategory } from "./category.js";
-import { handleFile } from "./file.js";
+import { handleFile } from "./handleFile.js";
 import { query } from "../database/supabase.js";
 import { isAdmin } from "../utils/admin.js";
 import { setState } from "../utils/stateDb.js";
 
-// ================= SAFE JOIN CHECK =================
+// ================= ANSWER CALLBACK (IMPORTANT FIX) =================
+async function answerCallback(env, callback, text = "") {
+  try {
+    await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/answerCallbackQuery`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        callback_query_id: callback.id,
+        text
+      })
+    });
+  } catch (e) {
+    console.log("answerCallback error:", e);
+  }
+}
+
+// ================= CHECK JOIN =================
 async function checkJoin(env, telegramId) {
   try {
     const channels = await query(env, "required_channels", "GET");
@@ -17,7 +33,7 @@ async function checkJoin(env, telegramId) {
     for (const ch of channels) {
       const chatId = String(ch.channel_username || "").trim();
 
-      if (!chatId) return false;
+      if (!chatId) continue;
 
       const res = await fetch(
         `https://api.telegram.org/bot${env.BOT_TOKEN}/getChatMember?chat_id=${chatId}&user_id=${telegramId}`
@@ -35,27 +51,9 @@ async function checkJoin(env, telegramId) {
     }
 
     return true;
-
-  } catch (err) {
-    console.log("JOIN CHECK ERROR:", err);
-    return false;
-  }
-}
-
-// ================= ANSWER CALLBACK (IMPORTANT FIX) =================
-async function answerCallback(env, callback, text = "") {
-  try {
-    await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/answerCallbackQuery`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        callback_query_id: callback.id,
-        text,
-        show_alert: false
-      })
-    });
   } catch (e) {
-    console.log("answerCallback error", e);
+    console.log("CHECK JOIN ERROR:", e);
+    return false;
   }
 }
 
@@ -75,7 +73,7 @@ export async function handleCallback(env, callback) {
 
     if (!ok) {
       return await reply(
-        "❌ You have not joined all channels yet.\nPlease join them and try again."
+        "❌ You have not joined all channels yet.\nPlease join and try again."
       );
     }
 
@@ -115,9 +113,7 @@ export async function handleCallback(env, callback) {
   }
 
   // ================= BROWSE =================
-  if (data === "browse") {
-    return await handleBrowse(env, chatId);
-  }
+  if (data === "browse") return await handleBrowse(env, chatId);
 
   // ================= CATEGORY =================
   if (data.startsWith("category_")) {
@@ -164,9 +160,7 @@ export async function handleCallback(env, callback) {
 
     const categories = await query(env, "categories", "GET");
 
-    if (!categories?.length) {
-      return await reply("❌ No categories found.");
-    }
+    if (!categories?.length) return await reply("❌ No categories found.");
 
     const buttons = categories.map(c => ([
       { text: c.name, callback_data: `choosecat_${c.id}` }
