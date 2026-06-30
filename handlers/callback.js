@@ -4,116 +4,68 @@ import { handleBrowse } from "./browse.js";
 import { handleCategory } from "./category.js";
 import { handleFile } from "./file.js";
 import { query } from "../database/supabase.js";
+import { isAdmin } from "../utils/admin.js";
 
 export async function handleCallback(env, callback) {
   const chatId = callback.message.chat.id;
   const telegramId = callback.from.id;
   const data = callback.data;
 
-  // 📂 Browse
+  // browse
   if (data === "browse") {
     return await handleBrowse(env, chatId);
   }
 
-  // 📂 Category
+  // category
   if (data.startsWith("category_")) {
-    const categoryId = data.replace("category_", "");
-    return await handleCategory(env, chatId, categoryId);
+    const id = data.replace("category_", "");
+    return await handleCategory(env, chatId, id);
   }
 
-  // 📄 File details
+  // file
   if (data.startsWith("file_")) {
-    const fileId = data.replace("file_", "");
-    return await handleFile(env, chatId, fileId, telegramId);
+    const id = data.replace("file_", "");
+    return await handleFile(env, chatId, id, telegramId);
   }
 
-  // 💰 Unlock system (UPDATED)
+  // unlock
   if (data.startsWith("unlock_")) {
     const fileId = data.replace("unlock_", "");
 
-    const fileRes = await query(
-      env,
-      "files",
-      "GET",
-      null,
-      `?id=eq.${fileId}`
-    );
-
-    if (!fileRes.length) {
-      return await sendMessage(env, chatId, "❌ File not found.");
-    }
-
+    const fileRes = await query(env, "files", "GET", null, `?id=eq.${fileId}`);
     const file = fileRes[0];
 
-    // check if already purchased
-    const purchaseCheck = await query(
-      env,
-      "purchases",
-      "GET",
-      null,
-      `?telegram_id=eq.${telegramId}&file_id=eq.${fileId}`
-    );
+    const credits = await getCredits(env, telegramId);
 
-    if (purchaseCheck.length) {
-      return await sendMessage(
-        env,
-        chatId,
-        `📄 Already unlocked!\n\n🔗 ${file.file_url}`
-      );
+    if (credits < file.price) {
+      return await sendMessage(env, chatId, "❌ Not enough credits");
     }
 
-    const userCredits = await getCredits(env, telegramId);
-
-    if (userCredits < file.price) {
-      return await sendMessage(
-        env,
-        chatId,
-        `❌ Not enough credits.\nNeed ${file.price - userCredits} more.`
-      );
-    }
-
-    // deduct credits
     await addCredits(env, telegramId, -file.price);
 
-    // save purchase
-    await query(env, "purchases", "POST", {
-      telegram_id: telegramId,
-      file_id: fileId
-    });
-
-    await sendMessage(
-      env,
-      chatId,
-`✅ Successfully Unlocked!
-
-📄 ${file.title}
-
-🔗 ${file.file_url}`
+    await sendMessage(env, chatId,
+      `✅ Unlocked!\n\n${file.title}\n${file.file_url}`
     );
 
     return;
   }
 
-  // 💰 Credits
+  // =====================
+  // ADMIN ADD CATEGORY
+  // =====================
+  if (data === "admin_add_category") {
+    if (!isAdmin(env, telegramId)) return;
+
+    await env.STATE.put("state_" + telegramId, "add_category");
+
+    return await sendMessage(env, chatId, "✏️ Send category name:");
+  }
+
+  // other buttons
   if (data === "credits") {
-    const credits = await getCredits(env, telegramId);
-    return await sendMessage(env, chatId, `💰 Your credits: ${credits}`);
+    const c = await getCredits(env, telegramId);
+    return await sendMessage(env, chatId, `💰 ${c}`);
   }
 
-  // 👥 Referral
-  if (data === "refer") {
-    return await sendMessage(env, chatId, "👥 Referral system coming soon.");
-  }
-
-  // 🏆 Leaderboard
-  if (data === "leaderboard") {
-    return await sendMessage(env, chatId, "🏆 Leaderboard coming soon.");
-  }
-
-  // ℹ️ Help
-  if (data === "help") {
-    return await sendMessage(env, chatId, "ℹ️ Help section coming soon.");
-  }
-
-  return await sendMessage(env, chatId, "❌ Unknown action.");
+  return await sendMessage(env, chatId, "❌ Unknown action");
 }
