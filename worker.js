@@ -26,7 +26,7 @@ export default {
       return new Response("OK");
     }
 
-    // TEXT HANDLER (CATEGORY INPUT)
+    // 👑 STATE HANDLER (FIXED CORE ISSUE)
     if (update.message?.text && update.message?.from) {
       const userId = update.message.from.id;
       const text = update.message.text;
@@ -34,8 +34,7 @@ export default {
       if (await isAdmin(env, userId)) {
         const stateRow = await getState(env, userId);
 
-        // FIXED CHECK (IMPORTANT)
-        if (stateRow?.state === "add_category") {
+        if (stateRow && stateRow.state === "add_category") {
           await query(env, "categories", "POST", {
             name: text
           });
