@@ -2,6 +2,9 @@ import { handleStart } from "./handlers/start.js";
 import { handleCallback } from "./handlers/callback.js";
 import { handleAdmin } from "./handlers/admin.js";
 import { verifyJoin } from "./handlers/verify.js";
+import { query } from "./database/supabase.js";
+import { isAdmin } from "./utils/admin.js";
+import { getState, clearState } from "./utils/stateDb.js";
 
 export default {
   async fetch(request, env) {
@@ -13,44 +16,39 @@ export default {
 
     const chatId = update.message?.chat?.id;
 
-    // /start
+    // 🚀 START
     if (update.message?.text === "/start") {
       await handleStart(env, update.message);
       return new Response("OK");
     }
 
-    // /admin
+    // 👑 ADMIN PANEL
     if (update.message?.text === "/admin") {
       await handleAdmin(env, update.message);
       return new Response("OK");
     }
 
-    // =========================
-    // ADMIN TEXT HANDLER (FIXED)
-    // =========================
+    // 👑 ADMIN TEXT INPUT (CATEGORY ADD)
     if (update.message?.text && update.message?.from) {
-      const { isAdmin } = await import("./utils/admin.js");
-      const { query } = await import("./database/supabase.js");
-
       const userId = update.message.from.id;
       const text = update.message.text;
 
       if (await isAdmin(env, userId)) {
-        const state = await env.STATE.get("state_" + userId);
+        const state = await getState(env, userId);
 
         if (state === "add_category") {
           await query(env, "categories", "POST", {
             name: text
           });
 
-          await env.STATE.delete("state_" + userId);
+          await clearState(env, userId);
 
           return new Response("OK");
         }
       }
     }
 
-    // callbacks
+    // 🔘 CALLBACKS
     if (update.callback_query) {
       if (update.callback_query.data === "verify_join") {
         await verifyJoin(env, update.callback_query);
