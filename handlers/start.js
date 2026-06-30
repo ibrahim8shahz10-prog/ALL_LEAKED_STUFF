@@ -37,18 +37,13 @@ export async function handleStart(env, message) {
     }
 
     let text = "🚫 Join all channels to continue:\n\n";
-    let buttons = [];
 
-    for (const ch of channels) {
-      text += `• ${ch.channel_username}\n`;
-
-      buttons.push([
-        {
-          text: `Join ${ch.channel_username}`,
-          url: ch.invite_link
-        }
-      ]);
-    }
+    const buttons = channels.map(ch => ([
+      {
+        text: `📢 Join ${ch.channel_username}`,
+        url: ch.invite_link
+      }
+    ]));
 
     buttons.push([
       {
