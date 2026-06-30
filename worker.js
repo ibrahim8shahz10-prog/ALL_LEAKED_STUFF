@@ -17,13 +17,35 @@ export default {
       return new Response("OK");
     }
 
-    // 👑 ADMIN COMMAND
+    // /admin
     if (update.message?.text === "/admin") {
       await handleAdmin(env, update.message);
       return new Response("OK");
     }
 
-    // callbacks
+    // 👑 ADMIN TEXT INPUT HANDLER (ADD CATEGORY FLOW)
+    if (update.message?.text && update.message?.from) {
+      const { getState, clearState } = await import("./utils/state.js");
+      const { isAdmin } = await import("./utils/admin.js");
+      const { query } = await import("./database/supabase.js");
+
+      const userId = update.message.from.id;
+      const text = update.message.text;
+
+      const state = getState(userId);
+
+      if (state?.action === "add_category" && isAdmin(env, userId)) {
+        await query(env, "categories", "POST", {
+          name: text
+        });
+
+        clearState(userId);
+
+        return new Response("OK");
+      }
+    }
+
+    // callback buttons
     if (update.callback_query) {
       if (update.callback_query.data === "verify_join") {
         await verifyJoin(env, update.callback_query);
