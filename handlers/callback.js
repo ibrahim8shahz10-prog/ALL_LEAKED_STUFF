@@ -80,7 +80,6 @@ export async function handleCallback(env, callback) {
   // ===== NEW: ADD FILE =====
 
   if (data === "admin_add_file") {
-
     if (!isAdmin(env, telegramId)) {
       return await sendMessage(
         env,
@@ -119,7 +118,6 @@ export async function handleCallback(env, callback) {
   }
 
   if (data.startsWith("choosecat_")) {
-
     const categoryId = data.replace("choosecat_", "");
 
     await setState(
@@ -133,7 +131,7 @@ export async function handleCallback(env, callback) {
       chatId,
       "📎 Now send the file."
     );
-  }  }
+  } // Fixed: Removed the duplicate closing brace here
 
   // Delete Category Menu
   if (data === "admin_delete_category") {
@@ -268,4 +266,4 @@ export async function handleCallback(env, callback) {
     chatId,
     "❌ Unknown action"
   );
-          }
+} // Properly closes the handleCallback function
