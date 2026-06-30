@@ -15,7 +15,6 @@ export async function handleAdmin(env, message) {
 Choose an option:`,
     inlineKeyboard([
       [{ text: "➕ Add Category", callback_data: "admin_add_category" }],
-      [{ text: "➕ Add File", callback_data: "admin_add_file" }],
       [{ text: "📊 Stats", callback_data: "admin_stats" }]
     ])
   );
