@@ -1,19 +1,16 @@
 import { sendMessage } from "../services/telegram.js";
 import { mainMenu } from "../keyboards/mainMenu.js";
+import { getOrCreateUser } from "../models/user.js";
 
-export async function handleStart(env, chatId) {
+export async function handleStart(env, message) {
+  await getOrCreateUser(env, message.from);
+
   await sendMessage(
     env,
-    chatId,
-    `👋 Welcome!
+    message.chat.id,
+    `👋 Welcome, ${message.from.first_name}!
 
-This bot uses:
-• Credits
-• Referrals
-• Leaderboard
-• Unlockable Content
-
-Choose an option below.`,
+Your account has been created successfully.`,
     mainMenu()
   );
 }
