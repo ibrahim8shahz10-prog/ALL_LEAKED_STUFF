@@ -1,4 +1,5 @@
 import { query } from "../database/supabase.js";
+import { generateCode } from "../utils/generateCode.js";
 
 export async function getUser(env, telegramId) {
   const users = await query(
@@ -21,7 +22,8 @@ export async function createUser(env, user) {
       telegram_id: user.id,
       username: user.username || "",
       first_name: user.first_name || "",
-      credits: 0
+      credits: 0,
+      referral_code: generateCode(user.id)
     }
   );
 }
