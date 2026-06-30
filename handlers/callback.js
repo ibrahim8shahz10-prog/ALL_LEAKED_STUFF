@@ -22,7 +22,7 @@ async function checkJoin(env, telegramId) {
 
       const data = await res.json();
 
-      if (!data.ok || data.result.status === "left" || data.result.status === "kicked") {
+      if (!data?.ok || data?.result?.status === "left" || data?.result?.status === "kicked") {
         return false;
       }
     } catch {
@@ -51,7 +51,6 @@ export async function handleCallback(env, callback) {
       );
     }
 
-    // mark verified
     await query(
       env,
       "users",
@@ -60,11 +59,11 @@ export async function handleCallback(env, callback) {
       `?telegram_id=eq.${telegramId}`
     );
 
-    // AUTO OPEN MENU (FIX IMPORTANT)
+    // AUTO MAIN MENU
     return await sendMessage(
       env,
       chatId,
-      "✅ Verified Successfully!\n\n🎉 Welcome to Main Menu:",
+      "✅ Verified Successfully!\n\n🎉 Main Menu:",
       {
         inline_keyboard: [
           [{ text: "📂 Browse Files", callback_data: "browse" }],
@@ -75,7 +74,7 @@ export async function handleCallback(env, callback) {
     );
   }
 
-  // ================= GET USER =================
+  // ================= USER CHECK =================
   const userRes = await query(
     env,
     "users",
@@ -84,14 +83,14 @@ export async function handleCallback(env, callback) {
     `?telegram_id=eq.${telegramId}`
   );
 
-  const user = userRes[0];
+  const user = userRes?.[0];
 
-  // ================= BLOCK IF NOT VERIFIED =================
+  // BLOCK IF NOT VERIFIED
   if (user && !user.is_verified && data !== "verify_join") {
     return await sendMessage(
       env,
       chatId,
-      "🚫 Please join channels first and verify."
+      "🚫 Please join channels and verify first."
     );
   }
 
@@ -124,7 +123,12 @@ export async function handleCallback(env, callback) {
       `?id=eq.${fileId}`
     );
 
-    const file = fileRes[0];
+    const file = fileRes?.[0];
+
+    if (!file) {
+      return await sendMessage(env, chatId, "❌ File not found");
+    }
+
     const credits = await getCredits(env, telegramId);
 
     if (credits < file.price) {
@@ -147,7 +151,6 @@ export async function handleCallback(env, callback) {
     }
 
     await setState(env, telegramId, "add_category");
-
     return await sendMessage(env, chatId, "✏️ Send category name:");
   }
 
@@ -157,6 +160,10 @@ export async function handleCallback(env, callback) {
     }
 
     const categories = await query(env, "categories", "GET");
+
+    if (!categories.length) {
+      return await sendMessage(env, chatId, "❌ No categories found.");
+    }
 
     const buttons = categories.map(cat => [
       {
@@ -253,7 +260,6 @@ export async function handleCallback(env, callback) {
   // ================= CREDITS =================
   if (data === "credits") {
     const c = await getCredits(env, telegramId);
-
     return await sendMessage(env, chatId, `💰 Credits: ${c}`);
   }
 
