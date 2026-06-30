@@ -34,13 +34,23 @@ export async function handleCallback(env, callback) {
   if (data.startsWith("unlock_")) {
     const fileId = data.replace("unlock_", "");
 
-    const fileRes = await query(env, "files", "GET", null, `?id=eq.${fileId}`);
-    const file = fileRes[0];
+    const fileRes = await query(
+      env,
+      "files",
+      "GET",
+      null,
+      `?id=eq.${fileId}`
+    );
 
+    const file = fileRes[0];
     const credits = await getCredits(env, telegramId);
 
     if (credits < file.price) {
-      return await sendMessage(env, chatId, "❌ Not enough credits");
+      return await sendMessage(
+        env,
+        chatId,
+        "❌ Not enough credits"
+      );
     }
 
     await addCredits(env, telegramId, -file.price);
@@ -66,6 +76,64 @@ export async function handleCallback(env, callback) {
       "✏️ Send category name:"
     );
   }
+
+  // ===== NEW: ADD FILE =====
+
+  if (data === "admin_add_file") {
+
+    if (!isAdmin(env, telegramId)) {
+      return await sendMessage(
+        env,
+        chatId,
+        "❌ Access denied"
+      );
+    }
+
+    const categories = await query(
+      env,
+      "categories",
+      "GET"
+    );
+
+    if (!categories.length) {
+      return await sendMessage(
+        env,
+        chatId,
+        "❌ No categories found."
+      );
+    }
+
+    const buttons = categories.map(cat => [
+      {
+        text: cat.name,
+        callback_data: `choosecat_${cat.id}`
+      }
+    ]);
+
+    return await sendMessage(
+      env,
+      chatId,
+      "📁 Choose a category:",
+      inlineKeyboard(buttons)
+    );
+  }
+
+  if (data.startsWith("choosecat_")) {
+
+    const categoryId = data.replace("choosecat_", "");
+
+    await setState(
+      env,
+      telegramId,
+      `add_file_${categoryId}`
+    );
+
+    return await sendMessage(
+      env,
+      chatId,
+      "📎 Now send the file."
+    );
+  }  }
 
   // Delete Category Menu
   if (data === "admin_delete_category") {
@@ -154,7 +222,7 @@ export async function handleCallback(env, callback) {
     );
   }
 
-  // Cancel
+  // Cancel Delete
   if (data === "cancel_delete") {
     return await sendMessage(
       env,
@@ -200,4 +268,4 @@ export async function handleCallback(env, callback) {
     chatId,
     "❌ Unknown action"
   );
-}
+          }
