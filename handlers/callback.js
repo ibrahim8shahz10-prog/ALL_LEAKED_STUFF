@@ -47,7 +47,6 @@ export async function handleCallback(env, callback) {
     );
   }
 
-  // 👑 ADMIN: ADD CATEGORY
   if (data === "admin_add_category") {
     if (!isAdmin(env, telegramId)) {
       return await sendMessage(env, chatId, "❌ Access denied");
@@ -56,6 +55,26 @@ export async function handleCallback(env, callback) {
     await setState(env, telegramId, "add_category");
 
     return await sendMessage(env, chatId, "✏️ Send category name:");
+  }
+
+  if (data === "admin_stats") {
+    if (!isAdmin(env, telegramId)) {
+      return await sendMessage(env, chatId, "❌ Access denied");
+    }
+
+    const users = await query(env, "users", "GET");
+    const categories = await query(env, "categories", "GET");
+    const files = await query(env, "files", "GET");
+
+    return await sendMessage(
+      env,
+      chatId,
+      `📊 Bot Statistics
+
+👤 Users: ${users.length}
+📁 Categories: ${categories.length}
+📄 Files: ${files.length}`
+    );
   }
 
   if (data === "credits") {
