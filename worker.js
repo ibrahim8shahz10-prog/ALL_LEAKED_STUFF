@@ -14,29 +14,28 @@ export default {
 
     const update = await request.json();
 
-    const chatId = update.message?.chat?.id;
-
-    // 🚀 START
+    // START
     if (update.message?.text === "/start") {
       await handleStart(env, update.message);
       return new Response("OK");
     }
 
-    // 👑 ADMIN PANEL
+    // ADMIN PANEL
     if (update.message?.text === "/admin") {
       await handleAdmin(env, update.message);
       return new Response("OK");
     }
 
-    // 👑 ADMIN TEXT INPUT (CATEGORY ADD)
+    // TEXT HANDLER (CATEGORY INPUT)
     if (update.message?.text && update.message?.from) {
       const userId = update.message.from.id;
       const text = update.message.text;
 
       if (await isAdmin(env, userId)) {
-        const state = await getState(env, userId);
+        const stateRow = await getState(env, userId);
 
-        if (state === "add_category") {
+        // FIXED CHECK (IMPORTANT)
+        if (stateRow?.state === "add_category") {
           await query(env, "categories", "POST", {
             name: text
           });
@@ -48,7 +47,7 @@ export default {
       }
     }
 
-    // 🔘 CALLBACKS
+    // CALLBACKS
     if (update.callback_query) {
       if (update.callback_query.data === "verify_join") {
         await verifyJoin(env, update.callback_query);
