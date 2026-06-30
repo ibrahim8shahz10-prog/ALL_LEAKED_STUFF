@@ -4,7 +4,11 @@ import { inlineKeyboard } from "../keyboards/inlineKeyboard.js";
 
 export async function handleAdmin(env, message) {
   if (!isAdmin(env, message.from.id)) {
-    return await sendMessage(env, message.chat.id, "❌ Access denied");
+    return await sendMessage(
+      env,
+      message.chat.id,
+      "❌ Access denied"
+    );
   }
 
   await sendMessage(
@@ -12,8 +16,24 @@ export async function handleAdmin(env, message) {
     message.chat.id,
     "👑 Admin Panel",
     inlineKeyboard([
-      [{ text: "➕ Add Category", callback_data: "admin_add_category" }],
-      [{ text: "📊 Stats", callback_data: "admin_stats" }]
+      [
+        {
+          text: "➕ Add Category",
+          callback_data: "admin_add_category"
+        }
+      ],
+      [
+        {
+          text: "🗑 Delete Category",
+          callback_data: "admin_delete_category"
+        }
+      ],
+      [
+        {
+          text: "📊 Stats",
+          callback_data: "admin_stats"
+        }
+      ]
     ])
   );
 }
