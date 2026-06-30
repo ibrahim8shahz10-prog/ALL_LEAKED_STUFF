@@ -25,9 +25,6 @@ async function checkJoin(env, telegramId) {
 
       const data = await res.json();
 
-      // Debug (optional)
-      console.log("JOIN CHECK:", chatId, data);
-
       if (!data?.ok) return false;
 
       const status = data?.result?.status;
@@ -40,8 +37,25 @@ async function checkJoin(env, telegramId) {
     return true;
 
   } catch (err) {
-    console.log("CHECK JOIN ERROR:", err);
+    console.log("JOIN CHECK ERROR:", err);
     return false;
+  }
+}
+
+// ================= ANSWER CALLBACK (IMPORTANT FIX) =================
+async function answerCallback(env, callback, text = "") {
+  try {
+    await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/answerCallbackQuery`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        callback_query_id: callback.id,
+        text,
+        show_alert: false
+      })
+    });
+  } catch (e) {
+    console.log("answerCallback error", e);
   }
 }
 
@@ -55,6 +69,8 @@ export async function handleCallback(env, callback) {
 
   // ================= VERIFY JOIN =================
   if (data === "verify_join") {
+    await answerCallback(env, callback, "Checking...");
+
     const ok = await checkJoin(env, telegramId);
 
     if (!ok) {
@@ -228,4 +244,4 @@ export async function handleCallback(env, callback) {
   }
 
   return await reply("❌ Unknown action");
-      }
+}
