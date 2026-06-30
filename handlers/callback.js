@@ -1,28 +1,34 @@
 import { sendMessage } from "../services/telegram.js";
 import { getCredits } from "../services/users.js";
+import { handleBrowse } from "./browse.js";
+import { handleCategory } from "./category.js";
 
 export async function handleCallback(env, callback) {
   const chatId = callback.message.chat.id;
   const telegramId = callback.from.id;
+  const data = callback.data;
 
-  switch (callback.data) {
-    case "browse":
-      await sendMessage(
-        env,
-        chatId,
-        "📁 Browse section is under development."
-      );
-      break;
+  // Browse
+  if (data === "browse") {
+    return await handleBrowse(env, chatId);
+  }
 
-    case "credits":
+  // Category
+  if (data.startsWith("category_")) {
+    const categoryId = data.replace("category_", "");
+    return await handleCategory(env, chatId, categoryId);
+  }
+
+  switch (data) {
+    case "credits": {
       const credits = await getCredits(env, telegramId);
-
       await sendMessage(
         env,
         chatId,
         `💰 Your credits: ${credits}`
       );
       break;
+    }
 
     case "refer":
       await sendMessage(
@@ -47,5 +53,12 @@ export async function handleCallback(env, callback) {
         "ℹ️ Help section coming soon."
       );
       break;
+
+    default:
+      await sendMessage(
+        env,
+        chatId,
+        "❌ Unknown option."
+      );
   }
 }
