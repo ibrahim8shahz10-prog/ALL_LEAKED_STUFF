@@ -1,48 +1,55 @@
 import { sendMessage } from "../services/telegram.js";
-import { mainMenu } from "../keyboards/mainMenu.js";
-import { getOrCreateUser } from "../models/user.js";
 import { query } from "../database/supabase.js";
 
 export async function handleStart(env, message) {
-  const user = await getOrCreateUser(env, message.from);
+  const userId = message.from.id;
+  const chatId = message.chat.id;
 
-  const args = message.text?.split(" ");
+  const ref = message.text?.split(" ")[1];
 
-  // referral check
-  if (args.length > 1) {
-    const refCode = args[1];
+  // create user if not exists
+  const user = await query(
+    env,
+    "users",
+    "GET",
+    null,
+    `?telegram_id=eq.${userId}`
+  );
 
-    const refUser = await query(
-      env,
-      "users",
-      "GET",
-      null,
-      `?referral_code=eq.${refCode}`
-    );
-
-    if (refUser.length && refUser[0].telegram_id !== message.from.id) {
-      const referrer = refUser[0];
-
-      // give reward
-      await query(env, "users?telegram_id=eq." + referrer.telegram_id, "PATCH", {
-        credits: (referrer.credits || 0) + 5
-      });
-
-      // mark user
-      await query(env, "users?telegram_id=eq." + message.from.id, "PATCH", {
-        referred_by: referrer.telegram_id
-      });
-    }
+  if (!user.length) {
+    await query(env, "users", "POST", {
+      telegram_id: userId,
+      referred_by: ref || null,
+      is_verified: false,
+      points: 0
+    });
   }
 
-  await sendMessage(
-    env,
-    message.chat.id,
-`👋 Welcome, ${message.from.first_name}!
+  // get channels
+  const channels = await query(env, "required_channels", "GET");
 
-💰 Earn 5 credits per referral.
+  let text = "🚫 You must join all channels to continue:\n\n";
+  let buttons = [];
 
-Your account is ready.`,
-    mainMenu()
-  );
+  for (const ch of channels) {
+    text += `• ${ch.channel_username}\n`;
+
+    buttons.push([
+      {
+        text: `Join ${ch.channel_username}`,
+        url: ch.invite_link
+      }
+    ]);
+  }
+
+  buttons.push([
+    {
+      text: "✅ Verify",
+      callback_data: "verify_join"
+    }
+  ]);
+
+  await sendMessage(env, chatId, text, {
+    inline_keyboard: buttons
+  });
 }
