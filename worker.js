@@ -5,6 +5,7 @@ import { verifyJoin } from "./handlers/verify.js";
 import { query } from "./database/supabase.js";
 import { isAdmin } from "./utils/admin.js";
 import { getState, clearState } from "./utils/stateDb.js";
+import { sendMessage } from "./services/telegram.js";
 
 export default {
   async fetch(request, env) {
@@ -17,9 +18,6 @@ export default {
     const message = update.message;
     const callback = update.callback_query;
 
-    /* =========================
-       1. CALLBACK HANDLER
-    ========================= */
     if (callback) {
       if (callback.data === "verify_join") {
         await verifyJoin(env, callback);
@@ -30,35 +28,35 @@ export default {
       return new Response("OK");
     }
 
-    /* =========================
-       2. MESSAGE HANDLER (FIXED CORE)
-    ========================= */
     if (message?.text) {
       const userId = message.from.id;
       const text = message.text;
 
-      // /start
       if (text === "/start") {
         await handleStart(env, message);
         return new Response("OK");
       }
 
-      // /admin
       if (text === "/admin") {
         await handleAdmin(env, message);
         return new Response("OK");
       }
 
-      // 🔥 STATE CHECK (MUST RUN BEFORE ANYTHING ELSE)
       if (await isAdmin(env, userId)) {
         const stateRow = await getState(env, userId);
 
-        if (stateRow?.state === "add_category") {
+        if (stateRow && stateRow.state === "add_category") {
           await query(env, "categories", "POST", {
             name: text
           });
 
           await clearState(env, userId);
+
+          await sendMessage(
+            env,
+            message.chat.id,
+            `✅ Category "${text}" added successfully.`
+          );
 
           return new Response("OK");
         }
