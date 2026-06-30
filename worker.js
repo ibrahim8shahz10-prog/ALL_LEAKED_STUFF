@@ -10,7 +10,7 @@ export default {
     const update = await request.json();
 
     if (update.message?.text === "/start") {
-      await handleStart(env, update.message.chat.id);
+      await handleStart(env, update.message);
     }
 
     if (update.callback_query) {
