@@ -7,8 +7,7 @@ export async function handleStart(env, message) {
 
   const ref = message.text?.split(" ")[1];
 
-  // create user if not exists
-  const user = await query(
+  let userRes = await query(
     env,
     "users",
     "GET",
@@ -16,43 +15,37 @@ export async function handleStart(env, message) {
     `?telegram_id=eq.${userId}`
   );
 
-  if (!user.length) {
+  if (!userRes.length) {
     await query(env, "users", "POST", {
       telegram_id: userId,
       referred_by: ref || null,
       is_verified: false,
       points: 0
     });
+
+    userRes = [{ is_verified: false }];
   }
 
-  const userData = user[0];
+  const user = userRes[0];
 
-  // 🔒 If not verified → show channels
-  if (!userData?.is_verified) {
-
+  // ================= NOT VERIFIED =================
+  if (!user.is_verified) {
     const channels = await query(env, "required_channels", "GET");
 
     if (!channels || channels.length === 0) {
-      return await sendMessage(
-        env,
-        chatId,
-        "⚠️ No channels set by admin."
-      );
+      return await sendMessage(env, chatId, "⚠️ No channels set.");
     }
 
-    let text = "🚫 You must join all channels to continue:\n\n";
+    let text = "🚫 Join all channels to continue:\n\n";
     let buttons = [];
 
     for (const ch of channels) {
-      const name = ch.channel_username;
-      const link = ch.invite_link;
-
-      text += `• ${name}\n`;
+      text += `• ${ch.channel_username}\n`;
 
       buttons.push([
         {
-          text: `Join ${name}`,
-          url: link
+          text: `Join ${ch.channel_username}`,
+          url: ch.invite_link
         }
       ]);
     }
@@ -69,17 +62,12 @@ export async function handleStart(env, message) {
     });
   }
 
-  // ✅ VERIFIED USERS → MAIN MENU
-  return await sendMessage(
-    env,
-    chatId,
-    "👋 Welcome back!",
-    {
-      inline_keyboard: [
-        [{ text: "📂 Browse Files", callback_data: "browse" }],
-        [{ text: "💰 Credits", callback_data: "credits" }],
-        [{ text: "👥 Referral", callback_data: "referral" }]
-      ]
-    }
-  );
+  // ================= MAIN MENU =================
+  return await sendMessage(env, chatId, "👋 Welcome!", {
+    inline_keyboard: [
+      [{ text: "📂 Browse Files", callback_data: "browse" }],
+      [{ text: "💰 Credits", callback_data: "credits" }],
+      [{ text: "👥 Referral", callback_data: "referral" }]
+    ]
+  });
 }
