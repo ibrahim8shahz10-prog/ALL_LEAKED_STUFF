@@ -14,27 +14,46 @@ export default {
 
     const update = await request.json();
 
-    // START
-    if (update.message?.text === "/start") {
-      await handleStart(env, update.message);
+    const message = update.message;
+    const callback = update.callback_query;
+
+    /* =========================
+       1. CALLBACK HANDLER
+    ========================= */
+    if (callback) {
+      if (callback.data === "verify_join") {
+        await verifyJoin(env, callback);
+        return new Response("OK");
+      }
+
+      await handleCallback(env, callback);
       return new Response("OK");
     }
 
-    // ADMIN PANEL
-    if (update.message?.text === "/admin") {
-      await handleAdmin(env, update.message);
-      return new Response("OK");
-    }
+    /* =========================
+       2. MESSAGE HANDLER (FIXED CORE)
+    ========================= */
+    if (message?.text) {
+      const userId = message.from.id;
+      const text = message.text;
 
-    // 👑 STATE HANDLER (FIXED CORE ISSUE)
-    if (update.message?.text && update.message?.from) {
-      const userId = update.message.from.id;
-      const text = update.message.text;
+      // /start
+      if (text === "/start") {
+        await handleStart(env, message);
+        return new Response("OK");
+      }
 
+      // /admin
+      if (text === "/admin") {
+        await handleAdmin(env, message);
+        return new Response("OK");
+      }
+
+      // 🔥 STATE CHECK (MUST RUN BEFORE ANYTHING ELSE)
       if (await isAdmin(env, userId)) {
         const stateRow = await getState(env, userId);
 
-        if (stateRow && stateRow.state === "add_category") {
+        if (stateRow?.state === "add_category") {
           await query(env, "categories", "POST", {
             name: text
           });
@@ -44,16 +63,7 @@ export default {
           return new Response("OK");
         }
       }
-    }
 
-    // CALLBACKS
-    if (update.callback_query) {
-      if (update.callback_query.data === "verify_join") {
-        await verifyJoin(env, update.callback_query);
-        return new Response("OK");
-      }
-
-      await handleCallback(env, update.callback_query);
       return new Response("OK");
     }
 
