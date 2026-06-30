@@ -1,7 +1,7 @@
 import { handleStart } from "./handlers/start.js";
 import { handleCallback } from "./handlers/callback.js";
 import { handleAdmin } from "./handlers/admin.js";
-import { verifyJoin } from "./handlers/verify.js";
+
 import { query } from "./database/supabase.js";
 import { isAdmin } from "./utils/admin.js";
 import { getState, setState, clearState } from "./utils/stateDb.js";
@@ -21,24 +21,18 @@ export default {
 
     // ================= CALLBACK =================
     if (callback) {
-      if (callback.data === "verify_join") {
-        await verifyJoin(env, callback);
-        return new Response("OK");
-      }
-
       await handleCallback(env, callback);
       return new Response("OK");
     }
 
-    // ================= MESSAGES =================
+    // ================= MESSAGE =================
     if (message) {
-
       const userId = message.from.id;
       const chatId = message.chat.id;
       const text = message.text || "";
       const document = message.document;
 
-      // ================= COMMANDS FIRST =================
+      // ================= COMMANDS =================
       if (text === "/start") {
         await handleStart(env, message);
         return new Response("OK");
@@ -49,156 +43,107 @@ export default {
         return new Response("OK");
       }
 
-      // ================= STATE HANDLING =================
+      // ================= ADMIN STATE SYSTEM =================
       if (await isAdmin(env, userId)) {
 
         const stateRow = await getState(env, userId);
 
         // ================= ADD CATEGORY =================
         if (stateRow?.state === "add_category") {
-
           await query(env, "categories", "POST", {
             name: text
           });
 
           await clearState(env, userId);
 
-          await sendMessage(
-            env,
-            chatId,
-            `✅ Category added: ${text}`
-          );
-
+          await sendMessage(env, chatId, `✅ Category added: ${text}`);
           return new Response("OK");
         }
 
-        // ================= ADD FILE (STEP 1) =================
-        if (stateRow?.state?.startsWith("add_file_") &&
-            !stateRow.state.includes("title") &&
-            !stateRow.state.includes("desc") &&
-            !stateRow.state.includes("price")) {
-
+        // ================= ADD FILE FLOW =================
+        if (stateRow?.state?.startsWith("add_file_")) {
           const categoryId = stateRow.state.replace("add_file_", "");
 
-          if (!document) {
-            await sendMessage(
-              env,
-              chatId,
-              "📎 Please send a file (document)."
-            );
+          // STEP 1: RECEIVE FILE
+          if (!stateRow.state.includes("title") &&
+              !stateRow.state.includes("desc") &&
+              !stateRow.state.includes("price")) {
+
+            if (!document) {
+              await sendMessage(env, chatId, "📎 Please send a file (document).");
+              return new Response("OK");
+            }
+
+            await createUpload(env, userId, categoryId, document.file_id);
+
+            await setState(env, userId, `add_file_title_${categoryId}`);
+
+            await sendMessage(env, chatId, "✏️ Now send TITLE");
             return new Response("OK");
           }
 
-          await createUpload(
-            env,
-            userId,
-            categoryId,
-            document.file_id
-          );
+          // STEP 2: TITLE
+          if (stateRow.state.startsWith("add_file_title_")) {
+            await query(env, "upload_temp", "PATCH", {
+              title: text
+            }, `?telegram_id=eq.${userId}`);
 
-          await setState(
-            env,
-            userId,
-            `add_file_title_${categoryId}`
-          );
+            const catId = stateRow.state.replace("add_file_title_", "");
 
-          await sendMessage(
-            env,
-            chatId,
-            "✅ File received!\n✏️ Now send TITLE"
-          );
+            await setState(env, userId, `add_file_desc_${catId}`);
 
-          return new Response("OK");
-        }
+            await sendMessage(env, chatId, "📝 Now send DESCRIPTION");
+            return new Response("OK");
+          }
 
-        // ================= TITLE =================
-        if (stateRow?.state?.startsWith("add_file_title_")) {
+          // STEP 3: DESCRIPTION
+          if (stateRow.state.startsWith("add_file_desc_")) {
+            await query(env, "upload_temp", "PATCH", {
+              description: text
+            }, `?telegram_id=eq.${userId}`);
 
-          await query(env, "upload_temp", "PATCH", {
-            title: text
-          }, `?telegram_id=eq.${userId}`);
+            const catId = stateRow.state.replace("add_file_desc_", "");
 
-          const categoryId = stateRow.state.replace("add_file_title_", "");
+            await setState(env, userId, `add_file_price_${catId}`);
 
-          await setState(
-            env,
-            userId,
-            `add_file_desc_${categoryId}`
-          );
+            await sendMessage(env, chatId, "💰 Now send PRICE");
+            return new Response("OK");
+          }
 
-          await sendMessage(
-            env,
-            chatId,
-            "📝 Now send DESCRIPTION"
-          );
+          // STEP 4: PRICE + SAVE
+          if (stateRow.state.startsWith("add_file_price_")) {
+            const price = parseInt(text);
 
-          return new Response("OK");
-        }
+            const temp = await query(
+              env,
+              "upload_temp",
+              "GET",
+              null,
+              `?telegram_id=eq.${userId}`
+            );
 
-        // ================= DESCRIPTION =================
-        if (stateRow?.state?.startsWith("add_file_desc_")) {
+            const data = temp?.[0];
 
-          await query(env, "upload_temp", "PATCH", {
-            description: text
-          }, `?telegram_id=eq.${userId}`);
+            if (!data) {
+              await sendMessage(env, chatId, "❌ Upload session expired.");
+              return new Response("OK");
+            }
 
-          const categoryId = stateRow.state.replace("add_file_desc_", "");
+            await query(env, "files", "POST", {
+              category_id: data.category_id,
+              title: data.title,
+              description: data.description,
+              price: price,
+              file_url: data.file_id
+            });
 
-          await setState(
-            env,
-            userId,
-            `add_file_price_${categoryId}`
-          );
+            await clearState(env, userId);
 
-          await sendMessage(
-            env,
-            chatId,
-            "💰 Now send PRICE"
-          );
+            await query(env, "upload_temp", "DELETE", null, `?telegram_id=eq.${userId}`);
 
-          return new Response("OK");
-        }
-
-        // ================= PRICE + SAVE =================
-        if (stateRow?.state?.startsWith("add_file_price_")) {
-
-          const price = parseInt(text);
-
-          const temp = await query(
-            env,
-            "upload_temp",
-            "GET",
-            null,
-            `?telegram_id=eq.${userId}`
-          );
-
-          const data = temp[0];
-
-          await query(env, "files", "POST", {
-            category_id: data.category_id,
-            title: data.title,
-            description: data.description,
-            price: price,
-            file_url: data.file_id
-          });
-
-          await clearState(env, userId);
-
-          await query(
-            env,
-            "upload_temp",
-            "DELETE",
-            null,
-            `?telegram_id=eq.${userId}`
-          );
-
-          await sendMessage(
-            env,
-            chatId,
-            "✅ File added successfully!"
-          );
-
-          return new Response("OK");
+            await sendMessage(env, chatId, "✅ File added successfully!");
+            return new Response("OK");
+          }
         }
       }
 
