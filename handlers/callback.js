@@ -81,3 +81,9 @@ export async function handleCallback(env, callback) {
   }
 
   // ℹ️ Help
+  if (data === "help") {
+    return await sendMessage(env, chatId, "ℹ️ Help coming soon.");
+  }
+
+  return await sendMessage(env, chatId, "❌ Unknown action");
+}
