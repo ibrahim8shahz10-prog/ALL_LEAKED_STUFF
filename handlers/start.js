@@ -25,31 +25,61 @@ export async function handleStart(env, message) {
     });
   }
 
-  // get channels
-  const channels = await query(env, "required_channels", "GET");
+  const userData = user[0];
 
-  let text = "🚫 You must join all channels to continue:\n\n";
-  let buttons = [];
+  // 🔒 If not verified → show channels
+  if (!userData?.is_verified) {
 
-  for (const ch of channels) {
-    text += `• ${ch.channel_username}\n`;
+    const channels = await query(env, "required_channels", "GET");
+
+    if (!channels || channels.length === 0) {
+      return await sendMessage(
+        env,
+        chatId,
+        "⚠️ No channels set by admin."
+      );
+    }
+
+    let text = "🚫 You must join all channels to continue:\n\n";
+    let buttons = [];
+
+    for (const ch of channels) {
+      const name = ch.channel_username;
+      const link = ch.invite_link;
+
+      text += `• ${name}\n`;
+
+      buttons.push([
+        {
+          text: `Join ${name}`,
+          url: link
+        }
+      ]);
+    }
 
     buttons.push([
       {
-        text: `Join ${ch.channel_username}`,
-        url: ch.invite_link
+        text: "✅ Verify",
+        callback_data: "verify_join"
       }
     ]);
+
+    return await sendMessage(env, chatId, text, {
+      inline_keyboard: buttons
+    });
   }
 
-  buttons.push([
+  // ✅ VERIFIED USERS → MAIN MENU
+  return await sendMessage(
+    env,
+    chatId,
+    "👋 Welcome back!",
     {
-      text: "✅ Verify",
-      callback_data: "verify_join"
+      inline_keyboard: [
+        [{ text: "📂 Browse Files", callback_data: "browse" }],
+        [{ text: "💰 Credits", callback_data: "credits" }],
+        [{ text: "👥 Referral", callback_data: "referral" }]
+      ]
     }
-  ]);
-
-  await sendMessage(env, chatId, text, {
-    inline_keyboard: buttons
-  });
+  );
 }
