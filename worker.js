@@ -4,8 +4,9 @@ import { handleAdmin } from "./handlers/admin.js";
 import { verifyJoin } from "./handlers/verify.js";
 import { query } from "./database/supabase.js";
 import { isAdmin } from "./utils/admin.js";
-import { getState, clearState } from "./utils/stateDb.js";
+import { getState, setState, clearState } from "./utils/stateDb.js";
 import { sendMessage } from "./services/telegram.js";
+import { createUpload } from "./utils/uploadTemp.js";
 
 export default {
   async fetch(request, env) {
@@ -13,12 +14,20 @@ export default {
       return new Response("Bot is running!");
     }
 
-    const update = await request.json();
+    // Safely parse JSON to prevent crashes on empty requests
+    let update;
+    try {
+      update = await request.json();
+    } catch (e) {
+      return new Response("Invalid JSON", { status: 400 });
+    }
 
     const message = update.message;
     const callback = update.callback_query;
 
-    // Callback buttons
+    // =====================
+    // CALLBACK HANDLER
+    // =====================
     if (callback) {
       if (callback.data === "verify_join") {
         await verifyJoin(env, callback);
@@ -29,10 +38,14 @@ export default {
       return new Response("OK");
     }
 
-    // Handle all messages
+    // =====================
+    // MESSAGE HANDLER
+    // =====================
     if (message) {
-      const userId = message.from.id;
-      const chatId = message.chat.id;
+      const userId = message.from?.id;
+      const chatId = message.chat?.id;
+
+      if (!userId || !chatId) return new Response("OK");
 
       const text = message.text || "";
       const document = message.document;
@@ -48,47 +61,49 @@ export default {
         return new Response("OK");
       }
 
-      // Admin states
+      // =====================
+      // ADMIN STATES
+      // =====================
       if (await isAdmin(env, userId)) {
         const stateRow = await getState(env, userId);
 
-        // Add Category
-        if (stateRow && stateRow.state === "add_category") {
-          await query(env, "categories", "POST", {
-            name: text
-          });
+        if (stateRow && stateRow.state) {
+          // ---------------------
+          // ADD CATEGORY
+          // ---------------------
+          if (stateRow.state === "add_category") {
+            if (!text.trim()) {
+              await sendMessage(env, chatId, "❌ Please send a valid text name for the category.");
+              return new Response("OK");
+            }
 
-          await clearState(env, userId);
-
-          await sendMessage(
-            env,
-            chatId,
-            `✅ Category "${text}" added successfully.`
-          );
-
-          return new Response("OK");
-        }
-
-        // Add File (Step 1)
-        if (stateRow && stateRow.state.startsWith("add_file_")) {
-
-          if (!document) {
-            await sendMessage(
-              env,
-              chatId,
-              "📎 Please send a document."
-            );
-
+            await query(env, "categories", "POST", { name: text });
+            await clearState(env, userId);
+            await sendMessage(env, chatId, `✅ Category "${text}" added successfully.`);
             return new Response("OK");
           }
 
-          await sendMessage(
-            env,
-            chatId,
-            "✅ File received!\n\n✏️ Now send the title."
-          );
+          // =====================
+          // ADD FILE - STEP 1 (DOCUMENT)
+          // =====================
+          if (stateRow.state.startsWith("add_file_")) {
+            const categoryId = stateRow.state.replace("add_file_", "");
 
-          return new Response("OK");
+            if (!document) {
+              await sendMessage(env, chatId, "📎 Please send a document (file).");
+              return new Response("OK");
+            }
+
+            // Save temp upload
+            await createUpload(env, userId, categoryId, document.file_id);
+
+            // Move to next step
+            await clearState(env, userId);
+            await setState(env, userId, `add_file_title_${categoryId}`);
+
+            await sendMessage(env, chatId, "✅ File received!\n\n✏️ Now send the TITLE.");
+            return new Response("OK");
+          }
         }
       }
 
