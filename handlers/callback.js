@@ -8,9 +8,11 @@ import { isAdmin } from "../utils/admin.js";
 import { setState } from "../utils/stateDb.js";
 import { inlineKeyboard } from "../keyboards/inlineKeyboard.js";
 
-// ================= CHECK JOIN FUNCTION =================
+// ================= CHECK JOIN =================
 async function checkJoin(env, telegramId) {
   const channels = await query(env, "required_channels", "GET");
+
+  if (!channels || channels.length === 0) return true;
 
   for (const ch of channels) {
     try {
@@ -20,7 +22,7 @@ async function checkJoin(env, telegramId) {
 
       const data = await res.json();
 
-      if (!data.ok || data.result.status === "left") {
+      if (!data.ok || data.result.status === "left" || data.result.status === "kicked") {
         return false;
       }
     } catch {
@@ -39,7 +41,6 @@ export async function handleCallback(env, callback) {
 
   // ================= VERIFY JOIN =================
   if (data === "verify_join") {
-
     const ok = await checkJoin(env, telegramId);
 
     if (!ok) {
@@ -50,6 +51,7 @@ export async function handleCallback(env, callback) {
       );
     }
 
+    // mark verified
     await query(
       env,
       "users",
@@ -58,15 +60,23 @@ export async function handleCallback(env, callback) {
       `?telegram_id=eq.${telegramId}`
     );
 
+    // AUTO OPEN MENU (FIX IMPORTANT)
     return await sendMessage(
       env,
       chatId,
-      "✅ Verified successfully!\n\nNow send /start again to continue."
+      "✅ Verified Successfully!\n\n🎉 Welcome to Main Menu:",
+      {
+        inline_keyboard: [
+          [{ text: "📂 Browse Files", callback_data: "browse" }],
+          [{ text: "💰 Credits", callback_data: "credits" }],
+          [{ text: "👥 Referral", callback_data: "referral" }]
+        ]
+      }
     );
   }
 
-  // ================= BLOCK IF NOT VERIFIED =================
-  const user = await query(
+  // ================= GET USER =================
+  const userRes = await query(
     env,
     "users",
     "GET",
@@ -74,11 +84,14 @@ export async function handleCallback(env, callback) {
     `?telegram_id=eq.${telegramId}`
   );
 
-  if (user.length && !user[0].is_verified) {
+  const user = userRes[0];
+
+  // ================= BLOCK IF NOT VERIFIED =================
+  if (user && !user.is_verified && data !== "verify_join") {
     return await sendMessage(
       env,
       chatId,
-      "🚫 Please join channels first and verify using /start"
+      "🚫 Please join channels first and verify."
     );
   }
 
@@ -127,7 +140,7 @@ export async function handleCallback(env, callback) {
     );
   }
 
-  // ================= ADMIN ADD CATEGORY =================
+  // ================= ADMIN =================
   if (data === "admin_add_category") {
     if (!isAdmin(env, telegramId)) {
       return await sendMessage(env, chatId, "❌ Access denied");
@@ -138,7 +151,6 @@ export async function handleCallback(env, callback) {
     return await sendMessage(env, chatId, "✏️ Send category name:");
   }
 
-  // ================= ADMIN ADD FILE =================
   if (data === "admin_add_file") {
     if (!isAdmin(env, telegramId)) {
       return await sendMessage(env, chatId, "❌ Access denied");
@@ -156,7 +168,7 @@ export async function handleCallback(env, callback) {
     return await sendMessage(
       env,
       chatId,
-      "📁 Choose a category:",
+      "📁 Choose category:",
       inlineKeyboard(buttons)
     );
   }
@@ -169,7 +181,7 @@ export async function handleCallback(env, callback) {
     return await sendMessage(env, chatId, "📎 Now send the file.");
   }
 
-  // ================= DELETE CATEGORY =================
+  // ================= DELETE =================
   if (data === "admin_delete_category") {
     if (!isAdmin(env, telegramId)) {
       return await sendMessage(env, chatId, "❌ Access denied");
@@ -187,7 +199,7 @@ export async function handleCallback(env, callback) {
     return await sendMessage(
       env,
       chatId,
-      "Select category to delete:",
+      "Select category:",
       inlineKeyboard(buttons)
     );
   }
@@ -246,4 +258,4 @@ export async function handleCallback(env, callback) {
   }
 
   return await sendMessage(env, chatId, "❌ Unknown action");
-  }
+}
