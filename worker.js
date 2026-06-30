@@ -86,7 +86,12 @@ export default {
           // =====================
           // ADD FILE - STEP 1 (DOCUMENT)
           // =====================
-          if (stateRow.state.startsWith("add_file_")) {
+          if (
+            stateRow.state.startsWith("add_file_") && 
+            !stateRow.state.includes("_title_") && 
+            !stateRow.state.includes("_desc_") && 
+            !stateRow.state.includes("_price_")
+          ) {
             const categoryId = stateRow.state.replace("add_file_", "");
 
             if (!document) {
@@ -102,6 +107,28 @@ export default {
             await setState(env, userId, `add_file_title_${categoryId}`);
 
             await sendMessage(env, chatId, "✅ File received!\n\n✏️ Now send the TITLE.");
+            return new Response("OK");
+          }
+
+          // =====================
+          // ADD FILE - STEP 2 (TITLE)
+          // =====================
+          if (stateRow.state.startsWith("add_file_title_")) {
+            const categoryId = stateRow.state.replace("add_file_title_", "");
+
+            if (!text.trim()) {
+              await sendMessage(env, chatId, "❌ Please send a valid text title.");
+              return new Response("OK");
+            }
+
+            // Save title to upload_temp table
+            await query(env, "upload_temp", "PATCH", { title: text }, { user_id: userId, category_id: categoryId });
+
+            // Move to next step
+            await clearState(env, userId);
+            await setState(env, userId, `add_file_desc_${categoryId}`);
+
+            await sendMessage(env, chatId, "✅ Title saved!\n\n📝 Now send the DESCRIPTION.");
             return new Response("OK");
           }
         }
