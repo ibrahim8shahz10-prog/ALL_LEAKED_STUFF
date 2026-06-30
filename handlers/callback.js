@@ -17,13 +17,13 @@ export async function handleCallback(env, callback) {
   }
 
   if (data.startsWith("category_")) {
-    const categoryId = data.replace("category_", "");
-    return await handleCategory(env, chatId, categoryId);
+    const id = data.replace("category_", "");
+    return await handleCategory(env, chatId, id);
   }
 
   if (data.startsWith("file_")) {
-    const fileId = data.replace("file_", "");
-    return await handleFile(env, chatId, fileId, telegramId);
+    const id = data.replace("file_", "");
+    return await handleFile(env, chatId, id, telegramId);
   }
 
   if (data.startsWith("unlock_")) {
@@ -47,6 +47,7 @@ export async function handleCallback(env, callback) {
     );
   }
 
+  // 👑 ADMIN ADD CATEGORY
   if (data === "admin_add_category") {
     if (!isAdmin(env, telegramId)) {
       return await sendMessage(env, chatId, "❌ Access denied");
@@ -54,24 +55,12 @@ export async function handleCallback(env, callback) {
 
     await setState(env, telegramId, "add_category");
 
-    return await sendMessage(env, chatId, "✏️ Send category name now:");
+    return await sendMessage(env, chatId, "✏️ Send category name:");
   }
 
   if (data === "credits") {
     const c = await getCredits(env, telegramId);
-    return await sendMessage(env, chatId, `💰 Your credits: ${c}`);
-  }
-
-  if (data === "refer") {
-    return await sendMessage(env, chatId, "👥 Referral coming soon.");
-  }
-
-  if (data === "leaderboard") {
-    return await sendMessage(env, chatId, "🏆 Leaderboard coming soon.");
-  }
-
-  if (data === "help") {
-    return await sendMessage(env, chatId, "ℹ️ Help coming soon.");
+    return await sendMessage(env, chatId, `💰 ${c}`);
   }
 
   return await sendMessage(env, chatId, "❌ Unknown action");
