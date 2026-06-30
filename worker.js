@@ -11,6 +11,8 @@ export default {
 
     const update = await request.json();
 
+    const chatId = update.message?.chat?.id;
+
     // /start
     if (update.message?.text === "/start") {
       await handleStart(env, update.message);
@@ -23,29 +25,32 @@ export default {
       return new Response("OK");
     }
 
-    // 👑 ADMIN TEXT INPUT HANDLER (ADD CATEGORY FLOW)
+    // =========================
+    // ADMIN TEXT HANDLER (FIXED)
+    // =========================
     if (update.message?.text && update.message?.from) {
-      const { getState, clearState } = await import("./utils/state.js");
       const { isAdmin } = await import("./utils/admin.js");
       const { query } = await import("./database/supabase.js");
 
       const userId = update.message.from.id;
       const text = update.message.text;
 
-      const state = getState(userId);
+      if (await isAdmin(env, userId)) {
+        const state = await env.STATE.get("state_" + userId);
 
-      if (state?.action === "add_category" && isAdmin(env, userId)) {
-        await query(env, "categories", "POST", {
-          name: text
-        });
+        if (state === "add_category") {
+          await query(env, "categories", "POST", {
+            name: text
+          });
 
-        clearState(userId);
+          await env.STATE.delete("state_" + userId);
 
-        return new Response("OK");
+          return new Response("OK");
+        }
       }
     }
 
-    // callback buttons
+    // callbacks
     if (update.callback_query) {
       if (update.callback_query.data === "verify_join") {
         await verifyJoin(env, update.callback_query);
