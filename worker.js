@@ -42,15 +42,12 @@ export default {
     // MESSAGE HANDLER
     // =====================
     if (message) {
-      const userId = message.from?.id;
-      const chatId = message.chat?.id;
-
-      if (!userId || !chatId) return new Response("OK");
-
+      const userId = message.from.id;
+      const chatId = message.chat.id;
       const text = message.text || "";
       const document = message.document;
 
-      // Commands
+      // 1. COMMANDS FIRST
       if (text === "/start") {
         await handleStart(env, message);
         return new Response("OK");
@@ -61,13 +58,11 @@ export default {
         return new Response("OK");
       }
 
-      // =====================
-      // ADMIN STATES
-      // =====================
+      // 2. STATE HANDLING SECOND
       if (await isAdmin(env, userId)) {
         const stateRow = await getState(env, userId);
 
-        if (stateRow && stateRow.state) {
+        if (stateRow) {
           // ---------------------
           // ADD CATEGORY
           // ---------------------
@@ -134,6 +129,7 @@ export default {
         }
       }
 
+      // 3. ALWAYS END SAFE
       return new Response("OK");
     }
 
