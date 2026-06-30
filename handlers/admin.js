@@ -10,9 +10,7 @@ export async function handleAdmin(env, message) {
   await sendMessage(
     env,
     message.chat.id,
-    `👑 Admin Panel
-
-Choose an option:`,
+    "👑 Admin Panel",
     inlineKeyboard([
       [{ text: "➕ Add Category", callback_data: "admin_add_category" }],
       [{ text: "📊 Stats", callback_data: "admin_stats" }]
