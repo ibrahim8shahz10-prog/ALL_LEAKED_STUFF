@@ -24,6 +24,12 @@ export async function handleAdmin(env, message) {
       ],
       [
         {
+          text: "📁 Add File",
+          callback_data: "admin_add_file"
+        }
+      ],
+      [
+        {
           text: "🗑 Delete Category",
           callback_data: "admin_delete_category"
         }
