@@ -47,7 +47,7 @@ export async function handleCallback(env, callback) {
     );
   }
 
-  // 👑 ADMIN ADD CATEGORY
+  // 👑 ADMIN: ADD CATEGORY
   if (data === "admin_add_category") {
     if (!isAdmin(env, telegramId)) {
       return await sendMessage(env, chatId, "❌ Access denied");
