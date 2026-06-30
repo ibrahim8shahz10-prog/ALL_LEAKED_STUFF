@@ -18,6 +18,7 @@ export default {
     const message = update.message;
     const callback = update.callback_query;
 
+    // Callback buttons
     if (callback) {
       if (callback.data === "verify_join") {
         await verifyJoin(env, callback);
@@ -28,10 +29,15 @@ export default {
       return new Response("OK");
     }
 
-    if (message?.text) {
+    // Handle all messages
+    if (message) {
       const userId = message.from.id;
-      const text = message.text;
+      const chatId = message.chat.id;
 
+      const text = message.text || "";
+      const document = message.document;
+
+      // Commands
       if (text === "/start") {
         await handleStart(env, message);
         return new Response("OK");
@@ -42,9 +48,11 @@ export default {
         return new Response("OK");
       }
 
+      // Admin states
       if (await isAdmin(env, userId)) {
         const stateRow = await getState(env, userId);
 
+        // Add Category
         if (stateRow && stateRow.state === "add_category") {
           await query(env, "categories", "POST", {
             name: text
@@ -54,8 +62,30 @@ export default {
 
           await sendMessage(
             env,
-            message.chat.id,
+            chatId,
             `✅ Category "${text}" added successfully.`
+          );
+
+          return new Response("OK");
+        }
+
+        // Add File (Step 1)
+        if (stateRow && stateRow.state.startsWith("add_file_")) {
+
+          if (!document) {
+            await sendMessage(
+              env,
+              chatId,
+              "📎 Please send a document."
+            );
+
+            return new Response("OK");
+          }
+
+          await sendMessage(
+            env,
+            chatId,
+            "✅ File received!\n\n✏️ Now send the title."
           );
 
           return new Response("OK");
