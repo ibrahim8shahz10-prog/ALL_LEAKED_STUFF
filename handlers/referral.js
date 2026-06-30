@@ -1,14 +1,26 @@
 import { sendMessage } from "../services/telegram.js";
-import { getUser } from "../models/user.js";
+import { query } from "../database/supabase.js";
 
 export async function referralMenu(env, callback) {
-  const user = await getUser(env, callback.from.id);
+  const user = await query(
+    env,
+    "users",
+    "GET",
+    null,
+    `?telegram_id=eq.${callback.from.id}`
+  );
 
-  const link = `https://t.me/${env.BOT_USERNAME}?start=${user.referral_code}`;
+  const botUsername = env.BOT_USERNAME;
+
+  const link = `https://t.me/${botUsername}?start=${user[0].referral_code}`;
 
   await sendMessage(
     env,
     callback.message.chat.id,
-    `👥 Your referral link:\n\n${link}`
+`👥 Your Referral Link:
+
+${link}
+
+💰 Earn 5 credits per user who joins.`
   );
 }
