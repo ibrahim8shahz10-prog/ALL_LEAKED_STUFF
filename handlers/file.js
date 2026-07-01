@@ -22,14 +22,14 @@ export async function handleFile(env, chatId, fileId, telegramId) {
     chatId,
 `📄 <b>${file.title}</b>
 
-💰 Price: ${file.price} Credits
+⭐ Price: ${file.price} Points
 
 📝 ${file.description || "No description"}
 `,
     inlineKeyboard([
       [
         {
-          text: "💰 Unlock",
+          text: "🔓 Unlock",
           callback_data: `unlock_${file.id}`
         }
       ],
