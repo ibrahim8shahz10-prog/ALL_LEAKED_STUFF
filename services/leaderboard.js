@@ -6,6 +6,6 @@ export async function getLeaderboard(env) {
     "users",
     "GET",
     null,
-    "?select=first_name,credits&order=credits.desc&limit=10"
+    "?select=first_name,points&order=points.desc&limit=10"
   );
 }
