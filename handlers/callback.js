@@ -10,6 +10,7 @@ import { mainMenu } from "../keyboards/mainMenu.js";
 import { rewardReferrer } from "../services/referrals.js";
 import { claimDailyBonus } from "../services/daily.js";
 import { leaderboardMenu } from "./leaderboard.js";
+import { generateCode } from "../utils/generateCode.js";
 
 async function answerCallback(env, callback, text = "") {
   try {
@@ -33,9 +34,6 @@ async function checkJoin(env, telegramId) {
     if (!Array.isArray(channels) || channels.length === 0) return true;
 
     for (const ch of channels) {
-      // Only Telegram membership can be verified via the Bot API.
-      // Non-Telegram channels (e.g. WhatsApp) are shown as a join
-      // button but cannot be technically enforced.
       if (ch.platform && ch.platform !== "telegram") continue;
 
       const chatId = String(ch?.channel_username || "").trim();
@@ -158,8 +156,21 @@ export async function handleCallback(env, callback) {
     if (data === "referral") {
       if (!user) return await reply("❌ Please send /start first.");
 
+      let referralCode = user.referral_code;
+
+      if (!referralCode) {
+        referralCode = generateCode(telegramId);
+        await query(
+          env,
+          "users",
+          "PATCH",
+          { referral_code: referralCode },
+          `?telegram_id=eq.${telegramId}`
+        );
+      }
+
       const botUsername = env.BOT_USERNAME;
-      const link = `https://t.me/${botUsername}?start=${user.referral_code}`;
+      const link = `https://t.me/${botUsername}?start=${referralCode}`;
 
       const referredRes = await query(
         env,
