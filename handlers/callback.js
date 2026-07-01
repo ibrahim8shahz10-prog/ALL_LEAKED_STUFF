@@ -2,12 +2,15 @@ import { sendMessage } from "../services/telegram.js";
 import { getCredits, addCredits } from "../services/users.js";
 import { handleBrowse } from "./browse.js";
 import { handleCategory } from "./category.js";
-import { handleFile } from "./file.js"; // Fixed: changed from "./handleFile.js" to "./file.js"
+import { handleFile } from "./file.js";
 import { query } from "../database/supabase.js";
 import { isAdmin } from "../utils/admin.js";
 import { setState } from "../utils/stateDb.js";
+import { mainMenu } from "../keyboards/mainMenu.js";
+import { rewardReferrer } from "../services/referrals.js";
+import { claimDailyBonus } from "../services/daily.js";
+import { leaderboardMenu } from "./leaderboard.js";
 
-// ================= ANSWER CALLBACK =================
 async function answerCallback(env, callback, text = "") {
   try {
     await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/answerCallbackQuery`, {
@@ -23,7 +26,6 @@ async function answerCallback(env, callback, text = "") {
   }
 }
 
-// ================= CHECK JOIN =================
 async function checkJoin(env, telegramId) {
   try {
     const channels = await query(env, "required_channels", "GET");
@@ -52,7 +54,6 @@ async function checkJoin(env, telegramId) {
   }
 }
 
-// ================= MAIN HANDLER =================
 export async function handleCallback(env, callback) {
   try {
     const chatId = callback?.message?.chat?.id;
@@ -63,7 +64,6 @@ export async function handleCallback(env, callback) {
 
     const reply = (msg, kb) => sendMessage(env, chatId, msg, kb);
 
-    // ================= VERIFY JOIN =================
     if (data === "verify_join") {
       await answerCallback(env, callback, "Checking...");
 
@@ -75,6 +75,9 @@ export async function handleCallback(env, callback) {
         );
       }
 
+      const userRes = await query(env, "users", "GET", null, `?telegram_id=eq.${telegramId}`);
+      const user = userRes?.[0];
+
       await query(
         env,
         "users",
@@ -83,16 +86,23 @@ export async function handleCallback(env, callback) {
         `?telegram_id=eq.${telegramId}`
       );
 
-      return await reply("✅ Verified Successfully!\n\n🎉 Main Menu:", {
-        inline_keyboard: [
-          [{ text: "📂 Browse Files", callback_data: "browse" }],
-          [{ text: "💰 Credits", callback_data: "credits" }],
-          [{ text: "👥 Referral", callback_data: "referral" }]
-        ]
-      });
+      if (user && user.referred_by && !user.referral_rewarded) {
+        await rewardReferrer(env, user.referred_by);
+        await query(
+          env,
+          "users",
+          "PATCH",
+          { referral_rewarded: true },
+          `?telegram_id=eq.${telegramId}`
+        );
+      }
+
+      return await reply(
+        "✅ <b>Verified Successfully!</b>\n\n🎉 Welcome to the main menu:",
+        mainMenu()
+      );
     }
 
-    // ================= USER CHECK =================
     const userRes = await query(
       env,
       "users",
@@ -107,23 +117,18 @@ export async function handleCallback(env, callback) {
       return await reply("🚫 Please join channels and verify first.");
     }
 
-    // ================= SAFE START CHECKS =================
     if (!data) return await reply("❌ Invalid action");
 
-    // ================= BROWSE =================
     if (data === "browse") return await handleBrowse(env, chatId);
 
-    // ================= CATEGORY =================
     if (data.startsWith("category_")) {
       return await handleCategory(env, chatId, data.replace("category_", ""));
     }
 
-    // ================= FILE =================
     if (data.startsWith("file_")) {
       return await handleFile(env, chatId, data.replace("file_", ""), telegramId);
     }
 
-    // ================= UNLOCK =================
     if (data.startsWith("unlock_")) {
       const fileId = data.replace("unlock_", "");
 
@@ -141,11 +146,42 @@ export async function handleCallback(env, callback) {
       await addCredits(env, telegramId, -file.price);
 
       return await reply(
-        `✅ Unlocked!\n\n📄 ${file.title}\n🔗 ${file.file_url}`
+        `✅ <b>Unlocked!</b>\n\n📄 ${file.title}\n🔗 ${file.file_url}`
       );
     }
 
-    // ================= ADMIN =================
+    if (data === "referral") {
+      if (!user) return await reply("❌ Please send /start first.");
+
+      const botUsername = env.BOT_USERNAME;
+      const link = `https://t.me/${botUsername}?start=${user.referral_code}`;
+
+      const referredRes = await query(
+        env,
+        "users",
+        "GET",
+        null,
+        `?referred_by=eq.${telegramId}&select=telegram_id`
+      );
+      const count = referredRes?.length || 0;
+
+      return await reply(
+        `👥 <b>Your Referral Link</b>\n\n${link}\n\n👤 Total Referrals: ${count}\n⭐ You earn points for every friend who joins and verifies!`
+      );
+    }
+
+    if (data === "points") {
+      return await reply(`⭐ Points: ${user?.points || 0}`);
+    }
+
+    if (data === "daily") {
+      return await claimDailyBonus(env, chatId, telegramId);
+    }
+
+    if (data === "leaderboard") {
+      return await leaderboardMenu(env, chatId);
+    }
+
     if (data === "admin_add_category") {
       if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
 
@@ -176,7 +212,6 @@ export async function handleCallback(env, callback) {
       return await reply("📎 Now send the file.");
     }
 
-    // ================= DELETE =================
     if (data === "admin_delete_category") {
       if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
 
@@ -219,7 +254,6 @@ export async function handleCallback(env, callback) {
       return await reply("❌ Cancelled.");
     }
 
-    // ================= STATS =================
     if (data === "admin_stats") {
       if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
 
@@ -228,11 +262,38 @@ export async function handleCallback(env, callback) {
       const files = await query(env, "files", "GET");
 
       return await reply(
-        `📊 Stats\n\n👤 Users: ${users?.length || 0}\n📁 Categories: ${categories?.length || 0}\n📄 Files: ${files?.length || 0}`
+        `📊 <b>Stats</b>\n\n👤 Users: ${users?.length || 0}\n📁 Categories: ${categories?.length || 0}\n📄 Files: ${files?.length || 0}`
       );
     }
 
-    // ================= CREDITS =================
+    if (data === "admin_broadcast") {
+      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
+
+      await setState(env, telegramId, "broadcast");
+      return await reply("📢 Send the message you want to broadcast to all users:");
+    }
+
+    if (data === "admin_create_code") {
+      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
+
+      await setState(env, telegramId, "create_code_points");
+      return await reply("🎁 How many points should this code give?");
+    }
+
+    if (data === "admin_set_refpoints") {
+      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
+
+      await setState(env, telegramId, "set_refpoints");
+      return await reply("👥 Enter new referral point reward (per verified referral):");
+    }
+
+    if (data === "admin_set_dailypoints") {
+      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
+
+      await setState(env, telegramId, "set_dailypoints");
+      return await reply("🎁 Enter new daily bonus points value:");
+    }
+
     if (data === "credits") {
       const c = await getCredits(env, telegramId);
       return await reply(`💰 Credits: ${c || 0}`);
@@ -240,6 +301,6 @@ export async function handleCallback(env, callback) {
 
     return await reply("❌ Unknown action");
   } catch (err) {
-    console.log("handleCallback error:", err);
+    console.log("handleCallback error:", err.message);
   }
-}
+        }
