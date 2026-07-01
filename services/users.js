@@ -1,6 +1,6 @@
 import { query } from "../database/supabase.js";
 
-export async function addCredits(env, telegramId, amount) {
+export async function addPoints(env, telegramId, amount) {
   const user = await query(
     env,
     "users",
@@ -11,19 +11,18 @@ export async function addCredits(env, telegramId, amount) {
 
   if (!user.length) return;
 
-  const credits = (user[0].credits || 0) + amount;
+  const points = (user[0].points || 0) + amount;
 
   await query(
     env,
-    "users?telegram_id=eq." + telegramId,
+    "users",
     "PATCH",
-    {
-      credits
-    }
+    { points },
+    `?telegram_id=eq.${telegramId}`
   );
 }
 
-export async function getCredits(env, telegramId) {
+export async function getPoints(env, telegramId) {
   const user = await query(
     env,
     "users",
@@ -34,5 +33,5 @@ export async function getCredits(env, telegramId) {
 
   if (!user.length) return 0;
 
-  return user[0].credits || 0;
+  return user[0].points || 0;
 }
