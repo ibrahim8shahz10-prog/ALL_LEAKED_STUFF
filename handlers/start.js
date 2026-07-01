@@ -78,12 +78,12 @@ export async function handleStart(env, message) {
     });
 
   } catch (err) {
-    console.log("handleStart error:", err);
+    console.log("handleStart error:", err.message);
 
     return await sendMessage(
       env,
       message.chat.id,
-      "❌ Internal server error. Check Cloudflare logs."
+      `❌ Error:\n<code>${err.message}</code>`
     );
   }
 }
