@@ -1,5 +1,5 @@
 import { sendMessage } from "../services/telegram.js";
-import { getCredits, addCredits } from "../services/users.js";
+import { getPoints, addPoints } from "../services/users.js";
 import { handleBrowse } from "./browse.js";
 import { handleCategory } from "./category.js";
 import { handleFile } from "./file.js";
@@ -33,6 +33,11 @@ async function checkJoin(env, telegramId) {
     if (!Array.isArray(channels) || channels.length === 0) return true;
 
     for (const ch of channels) {
+      // Only Telegram membership can be verified via the Bot API.
+      // Non-Telegram channels (e.g. WhatsApp) are shown as a join
+      // button but cannot be technically enforced.
+      if (ch.platform && ch.platform !== "telegram") continue;
+
       const chatId = String(ch?.channel_username || "").trim();
       if (!chatId) continue;
 
@@ -137,13 +142,13 @@ export async function handleCallback(env, callback) {
 
       if (!file) return await reply("❌ File not found");
 
-      const credits = await getCredits(env, telegramId);
+      const points = await getPoints(env, telegramId);
 
-      if ((credits || 0) < file.price) {
-        return await reply("❌ Not enough credits");
+      if ((points || 0) < file.price) {
+        return await reply("❌ Not enough points");
       }
 
-      await addCredits(env, telegramId, -file.price);
+      await addPoints(env, telegramId, -file.price);
 
       return await reply(
         `✅ <b>Unlocked!</b>\n\n📄 ${file.title}\n🔗 ${file.file_url}`
@@ -292,11 +297,6 @@ export async function handleCallback(env, callback) {
 
       await setState(env, telegramId, "set_dailypoints");
       return await reply("🎁 Enter new daily bonus points value:");
-    }
-
-    if (data === "credits") {
-      const c = await getCredits(env, telegramId);
-      return await reply(`💰 Credits: ${c || 0}`);
     }
 
     return await reply("❌ Unknown action");
