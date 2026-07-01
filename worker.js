@@ -7,6 +7,9 @@ import { isAdmin } from "./utils/admin.js";
 import { getState, setState, clearState } from "./utils/stateDb.js";
 import { sendMessage } from "./services/telegram.js";
 import { createUpload } from "./utils/uploadTemp.js";
+import { claimDailyBonus } from "./services/daily.js";
+import { redeemCode, createRedeemCode } from "./utils/redeem.js";
+import { updateSettings } from "./utils/settings.js";
 
 export default {
   async fetch(request, env) {
@@ -19,20 +22,17 @@ export default {
     const message = update.message;
     const callback = update.callback_query;
 
-    // ================= CALLBACK =================
     if (callback) {
       await handleCallback(env, callback);
       return new Response("OK");
     }
 
-    // ================= MESSAGE =================
     if (message) {
       const userId = message.from.id;
       const chatId = message.chat.id;
       const text = message.text || "";
       const document = message.document;
 
-      // ================= COMMANDS =================
       if (text === "/start") {
         await handleStart(env, message);
         return new Response("OK");
@@ -43,12 +43,108 @@ export default {
         return new Response("OK");
       }
 
-      // ================= ADMIN STATE SYSTEM =================
+      if (text === "/daily") {
+        await claimDailyBonus(env, chatId, userId);
+        return new Response("OK");
+      }
+
+      if (text.startsWith("/redeem")) {
+        const code = text.split(" ")[1];
+
+        if (!code) {
+          await sendMessage(env, chatId, "Usage: <code>/redeem CODE</code>");
+          return new Response("OK");
+        }
+
+        const result = await redeemCode(env, userId, code.trim());
+        await sendMessage(env, chatId, result.message);
+        return new Response("OK");
+      }
+
       if (await isAdmin(env, userId)) {
 
         const stateRow = await getState(env, userId);
 
-        // ================= ADD CATEGORY =================
+        if (stateRow?.state === "broadcast") {
+          await clearState(env, userId);
+
+          const users = await query(env, "users", "GET");
+          let sent = 0;
+
+          for (const u of users || []) {
+            try {
+              await sendMessage(env, u.telegram_id, `📢 <b>Announcement</b>\n\n${text}`);
+              sent++;
+            } catch (e) {
+              console.log("broadcast fail:", u.telegram_id, e.message);
+            }
+          }
+
+          await sendMessage(env, chatId, `✅ Broadcast sent to ${sent} users.`);
+          return new Response("OK");
+        }
+
+        if (stateRow?.state === "create_code_points") {
+          const points = parseInt(text);
+
+          if (isNaN(points)) {
+            await sendMessage(env, chatId, "❌ Please send a number.");
+            return new Response("OK");
+          }
+
+          await setState(env, userId, `create_code_maxuses_${points}`);
+          await sendMessage(env, chatId, "👥 How many users can redeem this code?");
+          return new Response("OK");
+        }
+
+        if (stateRow?.state?.startsWith("create_code_maxuses_")) {
+          const points = parseInt(stateRow.state.replace("create_code_maxuses_", ""));
+          const maxUses = parseInt(text);
+
+          if (isNaN(maxUses)) {
+            await sendMessage(env, chatId, "❌ Please send a number.");
+            return new Response("OK");
+          }
+
+          const code = await createRedeemCode(env, points, maxUses);
+          await clearState(env, userId);
+
+          await sendMessage(
+            env,
+            chatId,
+            `✅ <b>Redeem Code Created</b>\n\n🎁 Code: <code>${code}</code>\n⭐ Points: ${points}\n👥 Max Uses: ${maxUses}\n\nUsers redeem with:\n<code>/redeem ${code}</code>`
+          );
+          return new Response("OK");
+        }
+
+        if (stateRow?.state === "set_refpoints") {
+          const val = parseInt(text);
+
+          if (isNaN(val)) {
+            await sendMessage(env, chatId, "❌ Please send a number.");
+            return new Response("OK");
+          }
+
+          await updateSettings(env, { referral_points: val });
+          await clearState(env, userId);
+          await sendMessage(env, chatId, `✅ Referral points set to ${val} per verified referral.`);
+          return new Response("OK");
+        }
+
+        if (stateRow?.state === "set_dailypoints") {
+          const val = parseInt(text);
+
+          if (isNaN(val)) {
+            await sendMessage(env, chatId, "❌ Please send a number.");
+            return new Response("OK");
+          }
+
+          await updateSettings(env, { daily_points: val });
+          await clearState(env, userId);
+          await sendMessage(env, chatId, `✅ Daily bonus set to ${val} points.`);
+          return new Response("OK");
+        }
+
         if (stateRow?.state === "add_category") {
           await query(env, "categories", "POST", {
             name: text
@@ -60,11 +156,9 @@ export default {
           return new Response("OK");
         }
 
-        // ================= ADD FILE FLOW =================
         if (stateRow?.state?.startsWith("add_file_")) {
           const categoryId = stateRow.state.replace("add_file_", "");
 
-          // STEP 1: RECEIVE FILE
           if (!stateRow.state.includes("title") &&
               !stateRow.state.includes("desc") &&
               !stateRow.state.includes("price")) {
@@ -82,7 +176,6 @@ export default {
             return new Response("OK");
           }
 
-          // STEP 2: TITLE
           if (stateRow.state.startsWith("add_file_title_")) {
             await query(env, "upload_temp", "PATCH", {
               title: text
@@ -96,7 +189,6 @@ export default {
             return new Response("OK");
           }
 
-          // STEP 3: DESCRIPTION
           if (stateRow.state.startsWith("add_file_desc_")) {
             await query(env, "upload_temp", "PATCH", {
               description: text
@@ -110,7 +202,6 @@ export default {
             return new Response("OK");
           }
 
-          // STEP 4: PRICE + SAVE
           if (stateRow.state.startsWith("add_file_price_")) {
             const price = parseInt(text);
 
