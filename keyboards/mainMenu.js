@@ -1,34 +1,16 @@
 export function mainMenu() {
   return {
     inline_keyboard: [
+      [{ text: "📂 Browse Files", callback_data: "browse" }],
       [
-        {
-          text: "📁 Browse",
-          callback_data: "browse"
-        }
+        { text: "💰 Credits", callback_data: "credits" },
+        { text: "⭐ Points", callback_data: "points" }
       ],
       [
-        {
-          text: "💰 Credits",
-          callback_data: "credits"
-        },
-        {
-          text: "👥 Refer",
-          callback_data: "refer"
-        }
+        { text: "👥 Referral", callback_data: "referral" },
+        { text: "🎁 Daily Bonus", callback_data: "daily" }
       ],
-      [
-        {
-          text: "🏆 Leaderboard",
-          callback_data: "leaderboard"
-        }
-      ],
-      [
-        {
-          text: "ℹ️ Help",
-          callback_data: "help"
-        }
-      ]
+      [{ text: "🏆 Leaderboard", callback_data: "leaderboard" }]
     ]
   };
 }
