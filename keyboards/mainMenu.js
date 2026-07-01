@@ -3,14 +3,13 @@ export function mainMenu() {
     inline_keyboard: [
       [{ text: "📂 Browse Files", callback_data: "browse" }],
       [
-        { text: "💰 Credits", callback_data: "credits" },
-        { text: "⭐ Points", callback_data: "points" }
+        { text: "⭐ Points", callback_data: "points" },
+        { text: "🎁 Daily Bonus", callback_data: "daily" }
       ],
       [
         { text: "👥 Referral", callback_data: "referral" },
-        { text: "🎁 Daily Bonus", callback_data: "daily" }
-      ],
-      [{ text: "🏆 Leaderboard", callback_data: "leaderboard" }]
+        { text: "🏆 Leaderboard", callback_data: "leaderboard" }
+      ]
     ]
   };
 }
