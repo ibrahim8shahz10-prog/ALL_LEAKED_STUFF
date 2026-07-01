@@ -1,3 +1,6 @@
 name = "allleakedstuff"
 main = "worker.js"
 compatibility_date = "2026-06-29"
+
+[vars]
+BOT_USERNAME = "REaCtssHeLpEr_bot"
