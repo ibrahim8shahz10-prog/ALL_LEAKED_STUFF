@@ -2,67 +2,88 @@ import { sendMessage } from "../services/telegram.js";
 import { query } from "../database/supabase.js";
 
 export async function handleStart(env, message) {
-  const userId = message.from.id;
-  const chatId = message.chat.id;
+  try {
+    const userId = message.from.id;
+    const chatId = message.chat.id;
+    const ref = message.text?.split(" ")[1] || null;
 
-  const ref = message.text?.split(" ")[1];
+    let userRes = await query(
+      env,
+      "users",
+      "GET",
+      null,
+      `?telegram_id=eq.${userId}`
+    );
 
-  let userRes = await query(
-    env,
-    "users",
-    "GET",
-    null,
-    `?telegram_id=eq.${userId}`
-  );
+    if (!Array.isArray(userRes) || userRes.length === 0) {
+      await query(env, "users", "POST", {
+        telegram_id: userId,
+        referred_by: ref,
+        is_verified: false,
+        credits: 0,
+        points: 0
+      });
 
-  if (!userRes.length) {
-    await query(env, "users", "POST", {
-      telegram_id: userId,
-      referred_by: ref || null,
-      is_verified: false,
-      points: 0
-    });
-
-    userRes = [{ is_verified: false }];
-  }
-
-  const user = userRes[0];
-
-  // ================= NOT VERIFIED =================
-  if (!user.is_verified) {
-    const channels = await query(env, "required_channels", "GET");
-
-    if (!channels || channels.length === 0) {
-      return await sendMessage(env, chatId, "⚠️ No channels set.");
+      userRes = [{
+        telegram_id: userId,
+        is_verified: false,
+        credits: 0,
+        points: 0
+      }];
     }
 
-    let text = "🚫 Join all channels to continue:\n\n";
+    const user = userRes[0];
 
-    const buttons = channels.map(ch => ([
-      {
-        text: `📢 Join ${ch.channel_username}`,
-        url: ch.invite_link
+    if (!user.is_verified) {
+      const channels = await query(env, "required_channels", "GET");
+
+      if (!Array.isArray(channels) || channels.length === 0) {
+        return await sendMessage(
+          env,
+          chatId,
+          "⚠️ No required channels have been added by the admin."
+        );
       }
-    ]));
 
-    buttons.push([
-      {
-        text: "✅ Verify",
-        callback_data: "verify_join"
-      }
-    ]);
+      const buttons = channels.map(ch => ([
+        {
+          text: `📢 Join ${ch.channel_username}`,
+          url: ch.invite_link
+        }
+      ]));
 
-    return await sendMessage(env, chatId, text, {
-      inline_keyboard: buttons
+      buttons.push([
+        {
+          text: "✅ Verify",
+          callback_data: "verify_join"
+        }
+      ]);
+
+      return await sendMessage(
+        env,
+        chatId,
+        "🚫 Please join all required channels first.",
+        {
+          inline_keyboard: buttons
+        }
+      );
+    }
+
+    return await sendMessage(env, chatId, "👋 Welcome!", {
+      inline_keyboard: [
+        [{ text: "📂 Browse Files", callback_data: "browse" }],
+        [{ text: "💰 Credits", callback_data: "credits" }],
+        [{ text: "👥 Referral", callback_data: "referral" }]
+      ]
     });
-  }
 
-  // ================= MAIN MENU =================
-  return await sendMessage(env, chatId, "👋 Welcome!", {
-    inline_keyboard: [
-      [{ text: "📂 Browse Files", callback_data: "browse" }],
-      [{ text: "💰 Credits", callback_data: "credits" }],
-      [{ text: "👥 Referral", callback_data: "referral" }]
-    ]
-  });
+  } catch (err) {
+    console.log("handleStart error:", err);
+
+    return await sendMessage(
+      env,
+      message.chat.id,
+      "❌ Internal server error. Check Cloudflare logs."
+    );
+  }
 }
