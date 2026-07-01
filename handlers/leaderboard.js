@@ -1,22 +1,21 @@
 import { getLeaderboard } from "../services/leaderboard.js";
 import { sendMessage } from "../services/telegram.js";
 
-export async function leaderboardMenu(env, callback) {
+export async function leaderboardMenu(env, chatId) {
   const users = await getLeaderboard(env);
 
-  let text = "🏆 Top Users\n\n";
+  let text = "🏆 <b>Top Users</b>\n\n";
 
   if (!users.length) {
-    text += "No users found.";
+    text += "No users found yet.";
   } else {
+    const medals = ["🥇", "🥈", "🥉"];
     users.forEach((user, index) => {
-      text += `${index + 1}. ${user.first_name} — ${user.credits} credits\n`;
+      const medal = medals[index] || `${index + 1}.`;
+      const name = user.first_name || "Anonymous";
+      text += `${medal} ${name} — ⭐ ${user.points || 0} points\n`;
     });
   }
 
-  await sendMessage(
-    env,
-    callback.message.chat.id,
-    text
-  );
+  await sendMessage(env, chatId, text);
 }
