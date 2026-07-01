@@ -2,7 +2,7 @@ import { sendMessage } from "../services/telegram.js";
 import { getCredits, addCredits } from "../services/users.js";
 import { handleBrowse } from "./browse.js";
 import { handleCategory } from "./category.js";
-import { handleFile } from "./handleFile.js";
+import { handleFile } from "./file.js"; // Fixed: changed from "./handleFile.js" to "./file.js"
 import { query } from "../database/supabase.js";
 import { isAdmin } from "../utils/admin.js";
 import { setState } from "../utils/stateDb.js";
@@ -242,4 +242,4 @@ export async function handleCallback(env, callback) {
   } catch (err) {
     console.log("handleCallback error:", err);
   }
-             }
+}
