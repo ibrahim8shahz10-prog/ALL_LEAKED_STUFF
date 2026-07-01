@@ -1,11 +1,14 @@
 import { sendMessage } from "../services/telegram.js";
 import { query } from "../database/supabase.js";
+import { getReferral } from "../services/referrals.js";
+import { generateCode } from "../utils/generateCode.js";
+import { mainMenu } from "../keyboards/mainMenu.js";
 
 export async function handleStart(env, message) {
   try {
     const userId = message.from.id;
     const chatId = message.chat.id;
-    const ref = message.text?.split(" ")[1] || null;
+    const refCode = message.text?.split(" ")[1] || null;
 
     let userRes = await query(
       env,
@@ -16,9 +19,21 @@ export async function handleStart(env, message) {
     );
 
     if (!Array.isArray(userRes) || userRes.length === 0) {
+      let referredBy = null;
+
+      if (refCode) {
+        const referrer = await getReferral(env, refCode);
+        if (referrer && referrer.telegram_id !== userId) {
+          referredBy = referrer.telegram_id;
+        }
+      }
+
       await query(env, "users", "POST", {
         telegram_id: userId,
-        referred_by: ref,
+        username: message.from.username || "",
+        first_name: message.from.first_name || "",
+        referred_by: referredBy,
+        referral_code: generateCode(userId),
         is_verified: false,
         credits: 0,
         points: 0
@@ -62,20 +77,19 @@ export async function handleStart(env, message) {
       return await sendMessage(
         env,
         chatId,
-        "🚫 Please join all required channels first.",
+        "🚫 <b>One Step Left</b>\n\nPlease join all required channels, then tap Verify below.",
         {
           inline_keyboard: buttons
         }
       );
     }
 
-    return await sendMessage(env, chatId, "👋 Welcome!", {
-      inline_keyboard: [
-        [{ text: "📂 Browse Files", callback_data: "browse" }],
-        [{ text: "💰 Credits", callback_data: "credits" }],
-        [{ text: "👥 Referral", callback_data: "referral" }]
-      ]
-    });
+    return await sendMessage(
+      env,
+      chatId,
+      `👋 <b>Welcome back!</b>\n\nUse the menu below to get started.`,
+      mainMenu()
+    );
 
   } catch (err) {
     console.log("handleStart error:", err.message);
