@@ -17,7 +17,7 @@ export async function handleAdmin(env, message) {
     "👑 <b>Admin Panel</b>",
     inlineKeyboard([
       [{ text: "➕ Add Category", callback_data: "admin_add_category" }],
-      [{ text: "📁 Add File", callback_data: "admin_add_file" }],
+      [{ text: "📁 Add Content", callback_data: "admin_add_content" }],
       [{ text: "🗑 Delete Category", callback_data: "admin_delete_category" }],
       [{ text: "📊 Stats", callback_data: "admin_stats" }],
       [{ text: "📢 Broadcast Message", callback_data: "admin_broadcast" }],
