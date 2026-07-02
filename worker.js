@@ -10,6 +10,8 @@ import { createUpload } from "./utils/uploadTemp.js";
 import { claimDailyBonus } from "./services/daily.js";
 import { redeemCode, createRedeemCode } from "./utils/redeem.js";
 import { updateSettings } from "./utils/settings.js";
+import { helpMenu } from "./handlers/help.js";
+import { inlineKeyboard } from "./keyboards/inlineKeyboard.js";
 
 export default {
   async fetch(request, env) {
@@ -43,6 +45,11 @@ export default {
         return new Response("OK");
       }
 
+      if (text === "/help") {
+        await helpMenu(env, chatId);
+        return new Response("OK");
+      }
+
       if (text === "/daily") {
         await claimDailyBonus(env, chatId, userId);
         return new Response("OK");
@@ -61,9 +68,39 @@ export default {
         return new Response("OK");
       }
 
-      if (await isAdmin(env, userId)) {
+      const stateRow = await getState(env, userId);
 
-        const stateRow = await getState(env, userId);
+      if (stateRow?.state === "feedback_wait") {
+        await clearState(env, userId);
+
+        const fromName = message.from.username
+          ? `@${message.from.username}`
+          : (message.from.first_name || "User");
+
+        await sendMessage(
+          env,
+          env.ADMIN_ID,
+          `📩 <b>New Feedback</b>\n\nFrom: ${fromName} (ID: ${userId})\n\n${text}`,
+          inlineKeyboard([
+            [{ text: "💬 Reply", callback_data: `admin_reply_${userId}` }]
+          ])
+        );
+
+        await sendMessage(env, chatId, "✅ Your message has been sent to the admin.");
+        return new Response("OK");
+      }
+
+      if (stateRow?.state?.startsWith("reply_wait_") && (await isAdmin(env, userId))) {
+        const targetId = stateRow.state.replace("reply_wait_", "");
+
+        await clearState(env, userId);
+
+        await sendMessage(env, targetId, `📨 <b>Reply from Admin</b>\n\n${text}`);
+        await sendMessage(env, chatId, "✅ Reply sent.");
+        return new Response("OK");
+      }
+
+      if (await isAdmin(env, userId)) {
 
         if (stateRow?.state === "broadcast") {
           await clearState(env, userId);
@@ -142,6 +179,98 @@ export default {
           await updateSettings(env, { daily_points: val });
           await clearState(env, userId);
           await sendMessage(env, chatId, `✅ Daily bonus set to ${val} points.`);
+          return new Response("OK");
+        }
+
+        if (stateRow?.state === "give_points_id") {
+          const targetId = text.trim();
+
+          if (!/^\d+$/.test(targetId)) {
+            await sendMessage(env, chatId, "❌ Please send a valid numeric Telegram ID.");
+            return new Response("OK");
+          }
+
+          await setState(env, userId, `give_points_amount_${targetId}`);
+          await sendMessage(env, chatId, "⭐ How many points to give? (use a negative number to deduct)");
+          return new Response("OK");
+        }
+
+        if (stateRow?.state?.startsWith("give_points_amount_")) {
+          const targetId = stateRow.state.replace("give_points_amount_", "");
+          const amount = parseInt(text);
+
+          if (isNaN(amount)) {
+            await sendMessage(env, chatId, "❌ Please send a number.");
+            return new Response("OK");
+          }
+
+          const userRes = await query(env, "users", "GET", null, `?telegram_id=eq.${targetId}`);
+          const targetUser = userRes?.[0];
+
+          if (!targetUser) {
+            await clearState(env, userId);
+            await sendMessage(env, chatId, "❌ User not found.");
+            return new Response("OK");
+          }
+
+          const newPoints = (targetUser.points || 0) + amount;
+
+          await query(
+            env,
+            "users",
+            "PATCH",
+            { points: newPoints },
+            `?telegram_id=eq.${targetId}`
+          );
+
+          await clearState(env, userId);
+
+          await sendMessage(
+            env,
+            chatId,
+            `✅ ${amount >= 0 ? "Gave" : "Deducted"} ${Math.abs(amount)} points ${amount >= 0 ? "to" : "from"} user ${targetId}.\n⭐ New balance: ${newPoints}`
+          );
+
+          try {
+            await sendMessage(
+              env,
+              targetId,
+              amount >= 0
+                ? `🎁 An admin gave you ${amount} points!\n⭐ New balance: ${newPoints}`
+                : `⚠️ An admin deducted ${Math.abs(amount)} points.\n⭐ New balance: ${newPoints}`
+            );
+          } catch (e) {
+            console.log("notify user failed:", e.message);
+          }
+
+          return new Response("OK");
+        }
+
+        if (stateRow?.state === "ban_user_id") {
+          const targetId = text.trim();
+
+          if (!/^\d+$/.test(targetId)) {
+            await sendMessage(env, chatId, "❌ Please send a valid numeric Telegram ID.");
+            return new Response("OK");
+          }
+
+          await query(env, "users", "PATCH", { banned: true }, `?telegram_id=eq.${targetId}`);
+          await clearState(env, userId);
+          await sendMessage(env, chatId, `🚫 User ${targetId} has been banned.`);
+          return new Response("OK");
+        }
+
+        if (stateRow?.state === "unban_user_id") {
+          const targetId = text.trim();
+
+          if (!/^\d+$/.test(targetId)) {
+            await sendMessage(env, chatId, "❌ Please send a valid numeric Telegram ID.");
+            return new Response("OK");
+          }
+
+          await query(env, "users", "PATCH", { banned: false }, `?telegram_id=eq.${targetId}`);
+          await clearState(env, userId);
+          await sendMessage(env, chatId, `✅ User ${targetId} has been unbanned.`);
           return new Response("OK");
         }
 
