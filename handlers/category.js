@@ -21,7 +21,7 @@ export async function handleCategory(env, chatId, categoryId) {
 
   const buttons = files.map(file => ([
     {
-      text: `📄 ${file.title} (${file.price} Credits)`,
+      text: `📄 ${file.title} (${file.price} Points)`,
       callback_data: `file_${file.id}`
     }
   ]));
