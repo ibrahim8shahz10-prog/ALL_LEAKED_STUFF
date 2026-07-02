@@ -35,7 +35,7 @@ export default {
       const text = message.text || "";
       const document = message.document;
 
-      if (text === "/start") {
+      if (text.startsWith("/start")) {
         await handleStart(env, message);
         return new Response("OK");
       }
@@ -282,6 +282,85 @@ export default {
           await clearState(env, userId);
 
           await sendMessage(env, chatId, `✅ Category added: ${text}`);
+          return new Response("OK");
+        }
+
+        if (stateRow?.state?.startsWith("edit_cat_name_")) {
+          const catId = stateRow.state.replace("edit_cat_name_", "");
+
+          await query(env, "categories", "PATCH", { name: text }, `?id=eq.${catId}`);
+          await clearState(env, userId);
+
+          await sendMessage(env, chatId, `✅ Category renamed to: ${text}`);
+          return new Response("OK");
+        }
+
+        if (stateRow?.state?.startsWith("edit_file_title_")) {
+          const fileId = stateRow.state.replace("edit_file_title_", "");
+
+          await query(env, "files", "PATCH", { title: text }, `?id=eq.${fileId}`);
+          await clearState(env, userId);
+
+          await sendMessage(env, chatId, "✅ Title updated.");
+          return new Response("OK");
+        }
+
+        if (stateRow?.state?.startsWith("edit_file_desc_")) {
+          const fileId = stateRow.state.replace("edit_file_desc_", "");
+
+          await query(env, "files", "PATCH", { description: text }, `?id=eq.${fileId}`);
+          await clearState(env, userId);
+
+          await sendMessage(env, chatId, "✅ Description updated.");
+          return new Response("OK");
+        }
+
+        if (stateRow?.state?.startsWith("edit_file_price_")) {
+          const fileId = stateRow.state.replace("edit_file_price_", "");
+          const price = parseInt(text);
+
+          if (isNaN(price)) {
+            await sendMessage(env, chatId, "❌ Please send a number.");
+            return new Response("OK");
+          }
+
+          await query(env, "files", "PATCH", { price }, `?id=eq.${fileId}`);
+          await clearState(env, userId);
+
+          await sendMessage(env, chatId, `✅ Price updated to ${price} points.`);
+          return new Response("OK");
+        }
+
+        if (stateRow?.state?.startsWith("edit_file_content_file_")) {
+          const fileId = stateRow.state.replace("edit_file_content_file_", "");
+
+          if (!document) {
+            await sendMessage(env, chatId, "📎 Please send a file (document).");
+            return new Response("OK");
+          }
+
+          await query(env, "files", "PATCH", {
+            content_type: "file",
+            file_url: document.file_id,
+            text_content: null
+          }, `?id=eq.${fileId}`);
+
+          await clearState(env, userId);
+          await sendMessage(env, chatId, "✅ Content replaced with new file.");
+          return new Response("OK");
+        }
+
+        if (stateRow?.state?.startsWith("edit_file_content_text_")) {
+          const fileId = stateRow.state.replace("edit_file_content_text_", "");
+
+          await query(env, "files", "PATCH", {
+            content_type: "text",
+            text_content: text,
+            file_url: null
+          }, `?id=eq.${fileId}`);
+
+          await clearState(env, userId);
+          await sendMessage(env, chatId, "✅ Content replaced with new text.");
           return new Response("OK");
         }
 
