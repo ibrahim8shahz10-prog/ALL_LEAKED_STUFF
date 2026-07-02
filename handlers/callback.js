@@ -328,7 +328,7 @@ export async function handleCallback(env, callback) {
     if (data === "admin_view_users") {
       if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
 
-      const users = await query(env, "users", "GET", null, "?select=telegram_id,first_name,points,is_verified,banned&order=id.desc&limit=30");
+      const users = await query(env, "users", "GET", null, "?select=telegram_id,first_name,points,is_verified,banned&order=joined_at.desc&limit=30");
 
       if (!users?.length) return await reply("No users found.");
 
@@ -442,6 +442,139 @@ export async function handleCallback(env, callback) {
       return await reply("👤 Send the Telegram ID of the user to unban:");
     }
 
+    if (data === "admin_edit_category") {
+      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
+
+      const categories = await query(env, "categories", "GET");
+
+      if (!categories?.length) return await reply("❌ No categories found.");
+
+      const buttons = categories.map(c => ([
+        { text: c.name, callback_data: `editcat_${c.id}` }
+      ]));
+
+      return await reply("✏️ Select category to rename:", { inline_keyboard: buttons });
+    }
+
+    if (data.startsWith("editcat_")) {
+      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
+
+      const catId = data.replace("editcat_", "");
+      await setState(env, telegramId, `edit_cat_name_${catId}`);
+      return await reply("✏️ Send the new category name:");
+    }
+
+    if (data === "admin_edit_content") {
+      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
+
+      const categories = await query(env, "categories", "GET");
+
+      if (!categories?.length) return await reply("❌ No categories found.");
+
+      const buttons = categories.map(c => ([
+        { text: c.name, callback_data: `editcatfiles_${c.id}` }
+      ]));
+
+      return await reply("📁 Select category:", { inline_keyboard: buttons });
+    }
+
+    if (data.startsWith("editcatfiles_")) {
+      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
+
+      const catId = data.replace("editcatfiles_", "");
+      const files = await query(env, "files", "GET", null, `?category_id=eq.${catId}`);
+
+      if (!files?.length) return await reply("❌ No content in this category.");
+
+      const buttons = files.map(f => ([
+        { text: f.title, callback_data: `editfile_${f.id}` }
+      ]));
+
+      return await reply("📄 Select item to edit:", { inline_keyboard: buttons });
+    }
+
+    if (data.startsWith("editfile_")) {
+      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
+
+      const fileId = data.replace("editfile_", "");
+
+      return await reply("✏️ What do you want to edit?", {
+        inline_keyboard: [
+          [
+            { text: "📝 Title", callback_data: `editfield_title_${fileId}` },
+            { text: "📄 Description", callback_data: `editfield_desc_${fileId}` }
+          ],
+          [
+            { text: "💰 Price", callback_data: `editfield_price_${fileId}` },
+            { text: "📎 Replace Content", callback_data: `editfield_content_${fileId}` }
+          ],
+          [{ text: "🗑 Delete Item", callback_data: `deletefile_${fileId}` }]
+        ]
+      });
+    }
+
+    if (data.startsWith("editfield_title_")) {
+      const fileId = data.replace("editfield_title_", "");
+      await setState(env, telegramId, `edit_file_title_${fileId}`);
+      return await reply("✏️ Send the new title:");
+    }
+
+    if (data.startsWith("editfield_desc_")) {
+      const fileId = data.replace("editfield_desc_", "");
+      await setState(env, telegramId, `edit_file_desc_${fileId}`);
+      return await reply("📄 Send the new description:");
+    }
+
+    if (data.startsWith("editfield_price_")) {
+      const fileId = data.replace("editfield_price_", "");
+      await setState(env, telegramId, `edit_file_price_${fileId}`);
+      return await reply("💰 Send the new price (in points):");
+    }
+
+    if (data.startsWith("editfield_content_")) {
+      const fileId = data.replace("editfield_content_", "");
+
+      return await reply("What type of content is the replacement?", {
+        inline_keyboard: [
+          [
+            { text: "📎 File", callback_data: `editctype_file_${fileId}` },
+            { text: "📝 Text", callback_data: `editctype_text_${fileId}` }
+          ]
+        ]
+      });
+    }
+
+    if (data.startsWith("editctype_file_")) {
+      const fileId = data.replace("editctype_file_", "");
+      await setState(env, telegramId, `edit_file_content_file_${fileId}`);
+      return await reply("📎 Send the new file:");
+    }
+
+    if (data.startsWith("editctype_text_")) {
+      const fileId = data.replace("editctype_text_", "");
+      await setState(env, telegramId, `edit_file_content_text_${fileId}`);
+      return await reply("📝 Send the new text content:");
+    }
+
+    if (data.startsWith("deletefile_")) {
+      const fileId = data.replace("deletefile_", "");
+
+      return await reply("⚠️ Confirm delete this item?", {
+        inline_keyboard: [
+          [
+            { text: "✅ Yes", callback_data: `confirmdeletefile_${fileId}` },
+            { text: "❌ Cancel", callback_data: "cancel_delete" }
+          ]
+        ]
+      });
+    }
+
+    if (data.startsWith("confirmdeletefile_")) {
+      const fileId = data.replace("confirmdeletefile_", "");
+      await query(env, "files", "DELETE", null, `?id=eq.${fileId}`);
+      return await reply("✅ Item deleted.");
+    }
+
     return await reply("❌ Unknown action");
   } catch (err) {
     console.log("handleCallback error:", err.message);
@@ -459,4 +592,4 @@ export async function handleCallback(env, callback) {
       }
     }
   }
-}
+                                 }
