@@ -11,6 +11,8 @@ import { rewardReferrer } from "../services/referrals.js";
 import { claimDailyBonus } from "../services/daily.js";
 import { leaderboardMenu } from "./leaderboard.js";
 import { generateCode } from "../utils/generateCode.js";
+import { helpMenu } from "./help.js";
+import { inlineKeyboard } from "../keyboards/inlineKeyboard.js";
 
 async function answerCallback(env, callback, text = "") {
   try {
@@ -120,6 +122,10 @@ export async function handleCallback(env, callback) {
     );
 
     const user = userRes?.[0];
+
+    if (user && user.banned) {
+      return await reply("🚫 You have been banned from using this bot.");
+    }
 
     if (user && user.is_verified === false && data !== "verify_join") {
       return await reply("🚫 Please join channels and verify first.");
@@ -340,6 +346,44 @@ export async function handleCallback(env, callback) {
       return await reply("🎁 Enter new daily bonus points value:");
     }
 
+    if (data === "help") {
+      return await helpMenu(env, chatId);
+    }
+
+    if (data === "contact_admin") {
+      await setState(env, telegramId, "feedback_wait");
+      return await reply("📩 Send your message now — it'll be forwarded to the admin.");
+    }
+
+    if (data.startsWith("admin_reply_")) {
+      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
+
+      const targetId = data.replace("admin_reply_", "");
+      await setState(env, telegramId, `reply_wait_${targetId}`);
+      return await reply(`✏️ Send your reply to user ${targetId}:`);
+    }
+
+    if (data === "admin_give_points") {
+      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
+
+      await setState(env, telegramId, "give_points_id");
+      return await reply("👤 Send the Telegram ID of the user:");
+    }
+
+    if (data === "admin_ban_user") {
+      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
+
+      await setState(env, telegramId, "ban_user_id");
+      return await reply("👤 Send the Telegram ID of the user to ban:");
+    }
+
+    if (data === "admin_unban_user") {
+      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
+
+      await setState(env, telegramId, "unban_user_id");
+      return await reply("👤 Send the Telegram ID of the user to unban:");
+    }
+
     return await reply("❌ Unknown action");
   } catch (err) {
     console.log("handleCallback error:", err.message);
@@ -357,4 +401,4 @@ export async function handleCallback(env, callback) {
       }
     }
   }
-                                  }
+          }
