@@ -24,6 +24,10 @@ export async function handleAdmin(env, message) {
       ],
       [{ text: "🗑 Delete Category", callback_data: "admin_delete_category" }],
       [
+        { text: "✏️ Edit Category", callback_data: "admin_edit_category" },
+        { text: "✏️ Edit Content", callback_data: "admin_edit_content" }
+      ],
+      [
         { text: "💰 Give Points", callback_data: "admin_give_points" },
         { text: "🚫 Ban User", callback_data: "admin_ban_user" }
       ],
