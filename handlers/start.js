@@ -9,7 +9,6 @@ export async function handleStart(env, message) {
     const userId = message.from.id;
     const chatId = message.chat.id;
     const refCode = message.text?.split(" ")[1] || null;
-    let refDebug = refCode ? `\n\n🔍 <i>Debug: received code "${refCode}"</i>` : "";
 
     let userRes = await query(
       env,
@@ -26,11 +25,6 @@ export async function handleStart(env, message) {
         const referrer = await getReferral(env, refCode);
         if (referrer && referrer.telegram_id !== userId) {
           referredBy = referrer.telegram_id;
-          refDebug += `\n🔍 <i>Matched referrer ID: ${referrer.telegram_id}</i>`;
-        } else if (referrer) {
-          refDebug += `\n🔍 <i>Code matched yourself — ignored</i>`;
-        } else {
-          refDebug += `\n🔍 <i>No user found with that referral_code</i>`;
         }
       }
 
@@ -69,16 +63,7 @@ export async function handleStart(env, message) {
           );
 
           existing.referred_by = referrer.telegram_id;
-          refDebug += `\n🔍 <i>Matched referrer ID: ${referrer.telegram_id} (attached)</i>`;
-        } else if (referrer) {
-          refDebug += `\n🔍 <i>Code matched yourself — ignored</i>`;
-        } else {
-          refDebug += `\n🔍 <i>No user found with that referral_code</i>`;
         }
-      } else if (refCode && existing.referred_by) {
-        refDebug += `\n🔍 <i>Already linked to referrer ID: ${existing.referred_by}</i>`;
-      } else if (refCode && existing.is_verified) {
-        refDebug += `\n🔍 <i>Account already verified — too late to attach</i>`;
       }
     }
 
@@ -116,7 +101,7 @@ export async function handleStart(env, message) {
       return await sendMessage(
         env,
         chatId,
-        `🚫 <b>One Step Left</b>\n\nPlease join all required channels, then tap Verify below.${refDebug}`,
+        "🚫 <b>One Step Left</b>\n\nPlease join all required channels, then tap Verify below.",
         {
           inline_keyboard: buttons
         }
