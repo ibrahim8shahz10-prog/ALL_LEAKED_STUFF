@@ -49,6 +49,11 @@ export async function handleStart(env, message) {
 
     const user = userRes[0];
 
+    // Check if the user is banned before proceeding to verification/welcome
+    if (user.banned) {
+      return await sendMessage(env, chatId, "🚫 You have been banned from using this bot.");
+    }
+
     if (!user.is_verified) {
       const channels = await query(env, "required_channels", "GET");
 
