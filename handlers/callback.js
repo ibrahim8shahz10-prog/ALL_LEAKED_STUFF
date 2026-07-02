@@ -314,8 +314,66 @@ export async function handleCallback(env, callback) {
       const files = await query(env, "files", "GET");
 
       return await reply(
-        `📊 <b>Stats</b>\n\n👤 Users: ${users?.length || 0}\n📁 Categories: ${categories?.length || 0}\n📄 Files: ${files?.length || 0}`
+        `📊 <b>Stats Overview</b>\n\n👤 Users: ${users?.length || 0}\n📁 Categories: ${categories?.length || 0}\n📄 Files: ${files?.length || 0}\n\nTap below to see details:`,
+        {
+          inline_keyboard: [
+            [{ text: "👤 View Users", callback_data: "admin_view_users" }],
+            [{ text: "📁 View Categories", callback_data: "admin_view_categories" }],
+            [{ text: "📄 View Files", callback_data: "admin_view_files" }]
+          ]
+        }
       );
+    }
+
+    if (data === "admin_view_users") {
+      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
+
+      const users = await query(env, "users", "GET", null, "?select=telegram_id,first_name,points,is_verified,banned&order=id.desc&limit=30");
+
+      if (!users?.length) return await reply("No users found.");
+
+      let text = `👤 <b>Users (latest 30 of ${users.length})</b>\n\n`;
+
+      users.forEach((u, i) => {
+        const status = u.banned ? "🚫" : (u.is_verified ? "✅" : "⏳");
+        text += `${i + 1}. ${status} ${u.first_name || "Unknown"} (<code>${u.telegram_id}</code>) — ⭐ ${u.points || 0}\n`;
+      });
+
+      return await reply(text);
+    }
+
+    if (data === "admin_view_categories") {
+      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
+
+      const categories = await query(env, "categories", "GET");
+
+      if (!categories?.length) return await reply("No categories found.");
+
+      let text = `📁 <b>Categories</b>\n\n`;
+
+      for (const c of categories) {
+        const catFiles = await query(env, "files", "GET", null, `?category_id=eq.${c.id}&select=id`);
+        text += `• ${c.name} — ${catFiles?.length || 0} item(s)\n`;
+      }
+
+      return await reply(text);
+    }
+
+    if (data === "admin_view_files") {
+      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
+
+      const files = await query(env, "files", "GET", null, "?select=title,content_type,price,category_id&order=id.desc&limit=30");
+
+      if (!files?.length) return await reply("No files found.");
+
+      let text = `📄 <b>Files (latest 30 of ${files.length})</b>\n\n`;
+
+      files.forEach((f, i) => {
+        const icon = f.content_type === "text" ? "📝" : "📎";
+        text += `${i + 1}. ${icon} ${f.title} — ⭐ ${f.price}\n`;
+      });
+
+      return await reply(text);
     }
 
     if (data === "admin_broadcast") {
@@ -401,4 +459,4 @@ export async function handleCallback(env, callback) {
       }
     }
   }
-          }
+}
