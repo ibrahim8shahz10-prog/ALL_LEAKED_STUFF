@@ -9,6 +9,10 @@ export function mainMenu() {
       [
         { text: "👥 Referral", callback_data: "referral" },
         { text: "🏆 Leaderboard", callback_data: "leaderboard" }
+      ],
+      [
+        { text: "ℹ️ Help", callback_data: "help" },
+        { text: "📩 Contact Admin", callback_data: "contact_admin" }
       ]
     ]
   };
