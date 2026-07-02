@@ -1,16 +1,22 @@
 import { sendMessage } from "../services/telegram.js";
 
-export async function helpMenu(env, callback) {
+export async function helpMenu(env, chatId) {
   await sendMessage(
     env,
-    callback.message.chat.id,
-`ℹ️ Help
+    chatId,
+`ℹ️ <b>Help & Commands</b>
 
-• Browse content
-• Earn credits
-• Invite friends
-• Unlock content using credits
+📂 Browse — explore content
+⭐ Points — check your balance
+🎁 Daily Bonus — free points every 24h
+👥 Referral — invite friends & earn points
+🏆 Leaderboard — top point earners
 
-If you need help, contact the admin.`
+<b>Commands</b>
+/start — open the main menu
+/daily — claim your daily bonus
+/redeem CODE — redeem a gift code
+
+📩 Need help? Tap "Contact Admin" in the menu and send your message — it'll be forwarded directly.`
   );
 }
