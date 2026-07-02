@@ -1,4 +1,4 @@
-import { sendMessage } from "../services/telegram.js";
+import { sendMessage, sendDocument } from "../services/telegram.js";
 import { getPoints, addPoints } from "../services/users.js";
 import { handleBrowse } from "./browse.js";
 import { handleCategory } from "./category.js";
@@ -89,6 +89,8 @@ export async function handleCallback(env, callback) {
         `?telegram_id=eq.${telegramId}`
       );
 
+      let referralNote = "";
+
       if (user && user.referred_by && !user.referral_rewarded) {
         await rewardReferrer(env, user.referred_by);
         await query(
@@ -98,10 +100,13 @@ export async function handleCallback(env, callback) {
           { referral_rewarded: true },
           `?telegram_id=eq.${telegramId}`
         );
+        referralNote = "\n\n🔗 Referral credited to your inviter!";
+      } else if (user && !user.referred_by) {
+        referralNote = "\n\nℹ️ No referral was linked to this account.";
       }
 
       return await reply(
-        "✅ <b>Verified Successfully!</b>\n\n🎉 Welcome to the main menu:",
+        `✅ <b>Verified Successfully!</b>${referralNote}\n\n🎉 Welcome to the main menu:`,
         mainMenu()
       );
     }
@@ -148,9 +153,14 @@ export async function handleCallback(env, callback) {
 
       await addPoints(env, telegramId, -file.price);
 
-      return await reply(
-        `✅ <b>Unlocked!</b>\n\n📄 ${file.title}\n🔗 ${file.file_url}`
-      );
+      if (file.content_type === "text") {
+        return await reply(
+          `✅ <b>Unlocked!</b>\n\n📄 ${file.title}\n\n${file.text_content || ""}`
+        );
+      }
+
+      await reply(`✅ <b>Unlocked!</b>\n\n📄 ${file.title}`);
+      return await sendDocument(env, chatId, file.file_url, file.title);
     }
 
     if (data === "referral") {
@@ -205,7 +215,7 @@ export async function handleCallback(env, callback) {
       return await reply("✏️ Send category name:");
     }
 
-    if (data === "admin_add_file") {
+    if (data === "admin_add_content") {
       if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
 
       const categories = await query(env, "categories", "GET");
@@ -224,8 +234,28 @@ export async function handleCallback(env, callback) {
     }
 
     if (data.startsWith("choosecat_")) {
-      await setState(env, telegramId, `add_file_${data.replace("choosecat_", "")}`);
+      const catId = data.replace("choosecat_", "");
+
+      return await reply("What type of content is this?", {
+        inline_keyboard: [
+          [
+            { text: "📎 File", callback_data: `ctype_file_${catId}` },
+            { text: "📝 Text", callback_data: `ctype_text_${catId}` }
+          ]
+        ]
+      });
+    }
+
+    if (data.startsWith("ctype_file_")) {
+      const catId = data.replace("ctype_file_", "");
+      await setState(env, telegramId, `addc_file_wait_${catId}`);
       return await reply("📎 Now send the file.");
+    }
+
+    if (data.startsWith("ctype_text_")) {
+      const catId = data.replace("ctype_text_", "");
+      await setState(env, telegramId, `addc_text_wait_${catId}`);
+      return await reply("📝 Now send the text content.");
     }
 
     if (data === "admin_delete_category") {
@@ -313,5 +343,18 @@ export async function handleCallback(env, callback) {
     return await reply("❌ Unknown action");
   } catch (err) {
     console.log("handleCallback error:", err.message);
+
+    const fallbackChatId = callback?.message?.chat?.id;
+    if (fallbackChatId) {
+      try {
+        await sendMessage(
+          env,
+          fallbackChatId,
+          `❌ Error:\n<code>${err.message}</code>`
+        );
+      } catch (e) {
+        console.log("failed to report error:", e.message);
+      }
+    }
   }
-        }
+                                  }
