@@ -40,7 +40,8 @@ export async function handleAdmin(env, message) {
       [
         { text: "👥 Referral Points", callback_data: "admin_set_refpoints" },
         { text: "🎯 Daily Points", callback_data: "admin_set_dailypoints" }
-      ]
+      ],
+      [{ text: "🔒 Manage Required Channels", callback_data: "admin_manage_channels" }]
     ])
   );
 }
