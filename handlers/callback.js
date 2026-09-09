@@ -326,9 +326,7 @@ export async function handleCallback(env, callback) {
     }
 
     if (data === "admin_view_users") {
-      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
-
-      const users = await query(env, "users", "GET", null, "?select=telegram_id,first_name,points,is_verified,banned&order=joined_at.desc&limit=30");
+      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");const users = await query(env, "users", "GET", null, "?select=telegram_id,first_name,points,is_verified,banned&order=joined_at.desc&limit=30");
 
       if (!users?.length) return await reply("No users found.");
 
@@ -575,6 +573,59 @@ export async function handleCallback(env, callback) {
       return await reply("✅ Item deleted.");
     }
 
+    if (data === "admin_manage_channels") {
+      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
+
+      const channels = await query(env, "required_channels", "GET");
+
+      let text = "🔒 <b>Required Channels/Groups</b>\n\n";
+      const buttons = [];
+
+      if (!Array.isArray(channels) || channels.length === 0) {
+        text += "None added yet.";
+      } else {
+        channels.forEach((ch, i) => {
+          text += `${i + 1}. ${ch.channel_username}\n`;
+          buttons.push([
+            { text: `🗑 Remove ${ch.channel_username}`, callback_data: `delchannel_${ch.id}` }
+          ]);
+        });
+      }
+
+      buttons.push([{ text: "➕ Add Channel/Group", callback_data: "admin_add_channel" }]);
+
+      return await reply(text, { inline_keyboard: buttons });
+    }
+
+    if (data === "admin_add_channel") {
+      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
+
+      await setState(env, telegramId, "add_channel_username");
+      return await reply("✏️ Send the channel/group username (e.g. @SocialXservices):");
+    }
+
+    if (data.startsWith("delchannel_")) {
+      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
+
+      const id = data.replace("delchannel_", "");
+      return await reply("⚠️ Remove this from required channels?", {
+        inline_keyboard: [
+          [
+            { text: "✅ Yes", callback_data: `confirmdelchannel_${id}` },
+            { text: "❌ Cancel", callback_data: "cancel_delete" }
+          ]
+        ]
+      });
+    }
+
+    if (data.startsWith("confirmdelchannel_")) {
+      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
+
+      const id = data.replace("confirmdelchannel_", "");
+      await query(env, "required_channels", "DELETE", null, `?id=eq.${id}`);
+      return await reply("✅ Removed from required channels.");
+    }
+
     return await reply("❌ Unknown action");
   } catch (err) {
     console.log("handleCallback error:", err.message);
@@ -592,4 +643,4 @@ export async function handleCallback(env, callback) {
       }
     }
   }
-                                 }
+}
