@@ -457,6 +457,34 @@ export default {
           await sendMessage(env, chatId, "✅ Content added successfully!");
           return new Response("OK");
         }
+
+        if (stateRow?.state === "add_channel_username") {
+          const username = text.trim();
+
+          if (!username.startsWith("@")) {
+            await sendMessage(env, chatId, "❌ Please send a username starting with @ (e.g. @SocialXservices).");
+            return new Response("OK");
+          }
+
+          await setState(env, userId, `add_channel_link_${username}`);
+          await sendMessage(env, chatId, "🔗 Now send the invite link (e.g. https://t.me/SocialXservices):");
+          return new Response("OK");
+        }
+
+        if (stateRow?.state?.startsWith("add_channel_link_")) {
+          const username = stateRow.state.replace("add_channel_link_", "");
+          const link = text.trim();
+
+          await query(env, "required_channels", "POST", {
+            channel_username: username,
+            invite_link: link,
+            platform: "telegram"
+          });
+
+          await clearState(env, userId);
+          await sendMessage(env, chatId, `✅ Added to required channels: ${username}`);
+          return new Response("OK");
+        }
       }
 
       return new Response("OK");
