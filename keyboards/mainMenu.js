@@ -1,7 +1,14 @@
 export function mainMenu() {
   return {
     inline_keyboard: [
-      [{ text: "📂 Browse Files", callback_data: "browse" }],
+      [
+        { text: "📂 Browse", callback_data: "browse" },
+        { text: "🔍 Search", callback_data: "search_files" }
+      ],
+      [
+        { text: "👤 Profile", callback_data: "my_profile" },
+        { text: "💰 Buy Points", callback_data: "buy_points" }
+      ],
       [
         { text: "⭐ Points", callback_data: "points" },
         { text: "🎁 Daily Bonus", callback_data: "daily" }
