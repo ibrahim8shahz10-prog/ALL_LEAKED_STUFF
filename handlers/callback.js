@@ -159,6 +159,15 @@ export async function handleCallback(env, callback) {
 
       await addPoints(env, telegramId, -file.price);
 
+      try {
+        await query(env, "purchases", "POST", {
+          telegram_id: telegramId,
+          file_id: file.id
+        });
+      } catch (e) {
+        console.log("purchase log failed:", e.message);
+      }
+
       if (file.content_type === "text") {
         return await reply(
           `✅ <b>Unlocked!</b>\n\n📄 ${file.title}\n\n${file.text_content || ""}`
@@ -326,7 +335,9 @@ export async function handleCallback(env, callback) {
     }
 
     if (data === "admin_view_users") {
-      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");const users = await query(env, "users", "GET", null, "?select=telegram_id,first_name,points,is_verified,banned&order=joined_at.desc&limit=30");
+      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
+
+      const users = await query(env, "users", "GET", null, "?select=telegram_id,first_name,points,is_verified,banned&order=joined_at.desc&limit=30");
 
       if (!users?.length) return await reply("No users found.");
 
@@ -506,6 +517,7 @@ export async function handleCallback(env, callback) {
             { text: "💰 Price", callback_data: `editfield_price_${fileId}` },
             { text: "📎 Replace Content", callback_data: `editfield_content_${fileId}` }
           ],
+          [{ text: "📌 Pin/Unpin", callback_data: `togglepin_${fileId}` }],
           [{ text: "🗑 Delete Item", callback_data: `deletefile_${fileId}` }]
         ]
       });
@@ -626,6 +638,224 @@ export async function handleCallback(env, callback) {
       return await reply("✅ Removed from required channels.");
     }
 
+    if (data === "admin_search_user") {
+      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
+
+      await setState(env, telegramId, "search_user_id");
+      return await reply("🔍 Send the Telegram ID or @username to look up:");
+    }
+
+    if (data === "search_files") {
+      await setState(env, telegramId, "search_files_wait");
+      return await reply("🔍 Send a keyword to search files by title:");
+    }
+
+    if (data === "my_profile") {
+      if (!user) return await reply("❌ Please send /start first.");
+
+      const referredRes = await query(
+        env,
+        "users",
+        "GET",
+        null,
+        `?referred_by=eq.${telegramId}&select=telegram_id`
+      );
+      const referralCount = referredRes?.length || 0;
+
+      return await reply(
+`👤 <b>Your Profile</b>
+
+🆔 ID: <code>${telegramId}</code>
+📛 Name: ${user.first_name || "Unknown"}
+⭐ Points: ${user.points || 0}
+👥 Successful Referrals: ${referralCount}
+✅ Verified: ${user.is_verified ? "Yes" : "No"}`,
+        {
+          inline_keyboard: [
+            [{ text: "⬅️ Back to Menu", callback_data: "back_to_menu" }]
+          ]
+        }
+      );
+    }
+
+    if (data === "back_to_menu") {
+      return await reply("🏠 <b>Main Menu</b>", mainMenu());
+    }
+
+    if (data === "buy_points") {
+      const settingsRes = await query(env, "settings", "GET", null, "?id=eq.1");
+      const info = settingsRes?.[0]?.buy_points_info;
+
+      return await reply(
+        info
+          ? `💰 <b>Buy Points</b>\n\n${info}`
+          : "💰 <b>Buy Points</b>\n\nNot set up yet — contact the admin for details.",
+        {
+          inline_keyboard: [
+            [{ text: "📩 Contact Admin", callback_data: "contact_admin" }]
+          ]
+        }
+      );
+    }
+
+    if (data === "admin_set_buypoints") {
+      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
+
+      await setState(env, telegramId, "set_buypoints_info");
+      return await reply("💳 Send the new Buy Points instructions (price, how to pay, etc.):");
+    }
+
+    if (data.startsWith("togglepin_")) {
+      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
+
+      const fileId = data.replace("togglepin_", "");
+      const fileRes = await query(env, "files", "GET", null, `?id=eq.${fileId}`);
+      const file = fileRes?.[0];
+
+      if (!file) return await reply("❌ File not found.");
+
+      const newPinState = !file.is_pinned;
+      await query(env, "files", "PATCH", { is_pinned: newPinState }, `?id=eq.${fileId}`);
+
+      return await reply(newPinState ? "📌 File pinned to top." : "📄 File unpinned.");
+    }
+
+    if (data === "admin_top_purchased") {
+      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
+
+      const purchases = await query(env, "purchases", "GET", null, "?select=file_id");
+
+      if (!purchases?.length) return await reply("📊 No purchases recorded yet.");
+
+      const counts = {};
+      purchases.forEach(p => {
+        counts[p.file_id] = (counts[p.file_id] || 0) + 1;
+      });
+
+      const sortedIds = Object.keys(counts).sort((a, b) => counts[b] - counts[a]).slice(0, 10);
+
+      const filesRes = await query(env, "files", "GET", null, "?select=id,title");
+      const titleMap = {};
+      (filesRes || []).forEach(f => { titleMap[f.id] = f.title; });
+
+      let text = "🔥 <b>Top 10 Most Purchased Files</b>\n\n";
+      sortedIds.forEach((id, i) => {
+        text += `${i + 1}. ${titleMap[id] || "Unknown file"} — ${counts[id]} purchase(s)\n`;
+      });
+
+      return await reply(text);
+    }
+
+    if (data === "referral_leaderboard") {
+      const allUsers = await query(env, "users", "GET", null, "?select=telegram_id,first_name,referred_by");
+
+      const counts = {};
+      const nameMap = {};
+
+      (allUsers || []).forEach(u => {
+        nameMap[u.telegram_id] = u.first_name || "Anonymous";
+        if (u.referred_by) {
+          counts[u.referred_by] = (counts[u.referred_by] || 0) + 1;
+        }
+      });
+
+      const referrerIds = Object.keys(counts);
+
+      if (referrerIds.length === 0) {
+        return await reply("👥 No referrals yet.");
+      }
+
+      const sorted = referrerIds.sort((a, b) => counts[b] - counts[a]).slice(0, 10);
+      const medals = ["🥇", "🥈", "🥉"];
+
+      let text = "👥 <b>Top 10 Referrers</b>\n\n";
+      sorted.forEach((id, i) => {
+        const medal = medals[i] || `${i + 1}.`;
+        text += `${medal} ${nameMap[id] || "Anonymous"} — ${counts[id]} referral(s)\n`;
+      });
+
+      return await reply(text);
+    }
+
+    if (data === "my_profile") {
+      if (!user) return await reply("❌ Please send /start first.");
+
+      const referredRes = await query(env, "users", "GET", null, `?referred_by=eq.${telegramId}&select=telegram_id`);
+      const referralCount = referredRes?.length || 0;
+
+      return await reply(
+`👤 <b>Your Profile</b>
+
+📛 Name: ${user.first_name || "Unknown"}
+🆔 ID: <code>${telegramId}</code>
+⭐ Points: ${user.points || 0}
+👥 Successful Referrals: ${referralCount}
+✅ Verified: ${user.is_verified ? "Yes" : "No"}`
+      );
+    }
+
+    if (data === "buy_points") {
+      const settingsRes = await query(env, "settings", "GET", null, "?id=eq.1");
+      const info = settingsRes?.[0]?.buy_points_info;
+
+      return await reply(
+        info || "💰 Buying points isn't set up yet. Tap below to contact the admin.",
+        {
+          inline_keyboard: [
+            [{ text: "📩 Contact Admin", callback_data: "contact_admin" }]
+          ]
+        }
+      );
+    }
+
+    if (data === "admin_set_buypoints") {
+      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
+
+      await setState(env, telegramId, "set_buypoints_info");
+      return await reply("💳 Send the text you want users to see when they tap 'Buy Points' (e.g. payment method + how to contact you):");
+    }
+
+    if (data.startsWith("togglepin_")) {
+      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
+
+      const fileId = data.replace("togglepin_", "");
+      const fileRes = await query(env, "files", "GET", null, `?id=eq.${fileId}`);
+      const file = fileRes?.[0];
+
+      if (!file) return await reply("❌ File not found.");
+
+      const newPinState = !file.is_pinned;
+      await query(env, "files", "PATCH", { is_pinned: newPinState }, `?id=eq.${fileId}`);
+
+      return await reply(newPinState ? "📌 File pinned to top of its category." : "📄 File unpinned.");
+    }
+
+    if (data === "admin_top_purchased") {
+      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
+
+      const purchases = await query(env, "purchases", "GET", null, "?select=file_id");
+
+      if (!purchases?.length) return await reply("📊 No purchases recorded yet.");
+
+      const counts = {};
+      purchases.forEach(p => {
+        counts[p.file_id] = (counts[p.file_id] || 0) + 1;
+      });
+
+      const sortedIds = Object.keys(counts).sort((a, b) => counts[b] - counts[a]).slice(0, 10);
+
+      const filesRes = await query(env, "files", "GET", null, "?select=id,title");
+      const nameMap = {};
+      (filesRes || []).forEach(f => { nameMap[f.id] = f.title; });
+
+      let text = "🔥 <b>Top 10 Most Purchased Files</b>\n\n";
+      sortedIds.forEach((id, i) => {
+        text += `${i + 1}. ${nameMap[id] || "Unknown file"} — ${counts[id]} purchase(s)\n`;
+      });
+
+      return await reply(text);
+    }
+
     return await reply("❌ Unknown action");
   } catch (err) {
     console.log("handleCallback error:", err.message);
@@ -643,4 +873,4 @@ export async function handleCallback(env, callback) {
       }
     }
   }
-}
+                                 }
