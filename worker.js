@@ -73,6 +73,22 @@ export default {
       if (stateRow?.state === "feedback_wait") {
         await clearState(env, userId);
 
+        const currentUserRes = await query(env, "users", "GET", null, `?telegram_id=eq.${userId}`);
+        const currentUser = currentUserRes?.[0];
+
+        if (currentUser?.last_feedback_at) {
+          const secondsAgo = (Date.now() - new Date(currentUser.last_feedback_at).getTime()) / 1000;
+
+          if (secondsAgo < 10) {
+            await sendMessage(
+              env,
+              chatId,
+              `⏳ Please wait ${Math.ceil(10 - secondsAgo)} second(s) before messaging the admin again.`
+            );
+            return new Response("OK");
+          }
+        }
+
         const fromName = message.from.username
           ? `@${message.from.username}`
           : (message.from.first_name || "User");
@@ -84,6 +100,14 @@ export default {
           inlineKeyboard([
             [{ text: "💬 Reply", callback_data: `admin_reply_${userId}` }]
           ])
+        );
+
+        await query(
+          env,
+          "users",
+          "PATCH",
+          { last_feedback_at: new Date().toISOString() },
+          `?telegram_id=eq.${userId}`
         );
 
         await sendMessage(env, chatId, "✅ Your message has been sent to the admin.");
@@ -485,6 +509,77 @@ export default {
           await sendMessage(env, chatId, `✅ Added to required channels: ${username}`);
           return new Response("OK");
         }
+
+        if (stateRow?.state === "set_buypoints_info") {
+          await updateSettings(env, { buy_points_info: text });
+          await clearState(env, userId);
+          await sendMessage(env, chatId, "✅ Buy Points info updated.");
+          return new Response("OK");
+        }
+
+        if (stateRow?.state === "search_user_id") {
+          const term = text.trim();
+          await clearState(env, userId);
+
+          let userRes;
+
+          if (/^\d+$/.test(term)) {
+            userRes = await query(env, "users", "GET", null, `?telegram_id=eq.${term}`);
+          } else {
+            const cleanUsername = term.replace("@", "");
+            userRes = await query(env, "users", "GET", null, `?username=eq.${cleanUsername}`);
+          }
+
+          const found = userRes?.[0];
+
+          if (!found) {
+            await sendMessage(env, chatId, "❌ No user found matching that.");
+            return new Response("OK");
+          }
+
+          await sendMessage(
+            env,
+            chatId,
+`👤 <b>User Found</b>
+
+🆔 ID: <code>${found.telegram_id}</code>
+👤 Name: ${found.first_name || "Unknown"}
+🔗 Username: ${found.username ? "@" + found.username : "None"}
+⭐ Points: ${found.points || 0}
+✅ Verified: ${found.is_verified ? "Yes" : "No"}
+🚫 Banned: ${found.banned ? "Yes" : "No"}
+🔁 Referred by: ${found.referred_by || "None"}`
+          );
+          return new Response("OK");
+        }
+      }
+
+      if (stateRow?.state === "search_files_wait") {
+        await clearState(env, userId);
+
+        const keyword = text.trim();
+
+        const files = await query(
+          env,
+          "files",
+          "GET",
+          null,
+          `?title=ilike.*${encodeURIComponent(keyword)}*&limit=20`
+        );
+
+        if (!files?.length) {
+          await sendMessage(env, chatId, "❌ No files matched that keyword.");
+          return new Response("OK");
+        }
+
+        const buttons = files.map(f => ([
+          { text: `📄 ${f.title} (${f.price} Points)`, callback_data: `file_${f.id}` }
+        ]));
+
+        await sendMessage(env, chatId, `🔍 Found ${files.length} result(s):`, {
+          inline_keyboard: buttons
+        });
+        return new Response("OK");
       }
 
       return new Response("OK");
