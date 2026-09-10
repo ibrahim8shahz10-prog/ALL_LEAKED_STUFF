@@ -162,7 +162,7 @@ export async function handleCallback(env, callback) {
       try {
         await query(env, "purchases", "POST", {
           telegram_id: telegramId,
-          file_id: file.id
+          item_id: file.id
         });
       } catch (e) {
         console.log("purchase log failed:", e.message);
@@ -176,43 +176,6 @@ export async function handleCallback(env, callback) {
 
       await reply(`✅ <b>Unlocked!</b>\n\n📄 ${file.title}`);
       return await sendDocument(env, chatId, file.file_url, file.title);
-    }
-
-    if (data === "referral") {
-      if (!user) return await reply("❌ Please send /start first.");
-
-      let referralCode = user.referral_code;
-
-      if (!referralCode) {
-        referralCode = generateCode(telegramId);
-        await query(
-          env,
-          "users",
-          "PATCH",
-          { referral_code: referralCode },
-          `?telegram_id=eq.${telegramId}`
-        );
-      }
-
-      const botUsername = env.BOT_USERNAME;
-      const link = `https://t.me/${botUsername}?start=${referralCode}`;
-
-      const referredRes = await query(
-        env,
-        "users",
-        "GET",
-        null,
-        `?referred_by=eq.${telegramId}&select=telegram_id`
-      );
-      const count = referredRes?.length || 0;
-
-      return await reply(
-        `👥 <b>Your Referral Link</b>\n\n${link}\n\n👤 Total Referrals: ${count}\n⭐ You earn points for every friend who joins and verifies!`
-      );
-    }
-
-    if (data === "points") {
-      return await reply(`⭐ Points: ${user?.points || 0}`);
     }
 
     if (data === "daily") {
@@ -653,6 +616,19 @@ export async function handleCallback(env, callback) {
     if (data === "my_profile") {
       if (!user) return await reply("❌ Please send /start first.");
 
+      let referralCode = user.referral_code;
+
+      if (!referralCode) {
+        referralCode = generateCode(telegramId);
+        await query(
+          env,
+          "users",
+          "PATCH",
+          { referral_code: referralCode },
+          `?telegram_id=eq.${telegramId}`
+        );
+      }
+
       const referredRes = await query(
         env,
         "users",
@@ -662,20 +638,51 @@ export async function handleCallback(env, callback) {
       );
       const referralCount = referredRes?.length || 0;
 
+      const botUsername = env.BOT_USERNAME;
+      const referralLink = `https://t.me/${botUsername}?start=${referralCode}`;
+
       return await reply(
 `👤 <b>Your Profile</b>
-
+━━━━━━━━━━━━━━━━
 🆔 ID: <code>${telegramId}</code>
 📛 Name: ${user.first_name || "Unknown"}
 ⭐ Points: ${user.points || 0}
-👥 Successful Referrals: ${referralCount}
-✅ Verified: ${user.is_verified ? "Yes" : "No"}`,
+✅ Verified: ${user.is_verified ? "Yes" : "No"}
+
+👥 <b>Your Referrals</b>
+━━━━━━━━━━━━━━━━
+📊 Total Referrals: ${referralCount}
+🔗 Link: <code>${referralLink}</code>
+<i>Tap the link above to copy, or use the button below.</i>`,
         {
           inline_keyboard: [
+            [{ text: "🔗 Copy Referral Link", callback_data: "copy_referral_link" }],
             [{ text: "⬅️ Back to Menu", callback_data: "back_to_menu" }]
           ]
         }
       );
+    }
+
+    if (data === "copy_referral_link") {
+      if (!user) return await reply("❌ Please send /start first.");
+
+      let referralCode = user.referral_code;
+
+      if (!referralCode) {
+        referralCode = generateCode(telegramId);
+        await query(
+          env,
+          "users",
+          "PATCH",
+          { referral_code: referralCode },
+          `?telegram_id=eq.${telegramId}`
+        );
+      }
+
+      const botUsername = env.BOT_USERNAME;
+      const referralLink = `https://t.me/${botUsername}?start=${referralCode}`;
+
+      return await reply(`<code>${referralLink}</code>`);
     }
 
     if (data === "back_to_menu") {
@@ -723,13 +730,13 @@ export async function handleCallback(env, callback) {
     if (data === "admin_top_purchased") {
       if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
 
-      const purchases = await query(env, "purchases", "GET", null, "?select=file_id");
+      const purchases = await query(env, "purchases", "GET", null, "?select=item_id");
 
       if (!purchases?.length) return await reply("📊 No purchases recorded yet.");
 
       const counts = {};
       purchases.forEach(p => {
-        counts[p.file_id] = (counts[p.file_id] || 0) + 1;
+        counts[p.item_id] = (counts[p.item_id] || 0) + 1;
       });
 
       const sortedIds = Object.keys(counts).sort((a, b) => counts[b] - counts[a]).slice(0, 10);
@@ -741,116 +748,6 @@ export async function handleCallback(env, callback) {
       let text = "🔥 <b>Top 10 Most Purchased Files</b>\n\n";
       sortedIds.forEach((id, i) => {
         text += `${i + 1}. ${titleMap[id] || "Unknown file"} — ${counts[id]} purchase(s)\n`;
-      });
-
-      return await reply(text);
-    }
-
-    if (data === "referral_leaderboard") {
-      const allUsers = await query(env, "users", "GET", null, "?select=telegram_id,first_name,referred_by");
-
-      const counts = {};
-      const nameMap = {};
-
-      (allUsers || []).forEach(u => {
-        nameMap[u.telegram_id] = u.first_name || "Anonymous";
-        if (u.referred_by) {
-          counts[u.referred_by] = (counts[u.referred_by] || 0) + 1;
-        }
-      });
-
-      const referrerIds = Object.keys(counts);
-
-      if (referrerIds.length === 0) {
-        return await reply("👥 No referrals yet.");
-      }
-
-      const sorted = referrerIds.sort((a, b) => counts[b] - counts[a]).slice(0, 10);
-      const medals = ["🥇", "🥈", "🥉"];
-
-      let text = "👥 <b>Top 10 Referrers</b>\n\n";
-      sorted.forEach((id, i) => {
-        const medal = medals[i] || `${i + 1}.`;
-        text += `${medal} ${nameMap[id] || "Anonymous"} — ${counts[id]} referral(s)\n`;
-      });
-
-      return await reply(text);
-    }
-
-    if (data === "my_profile") {
-      if (!user) return await reply("❌ Please send /start first.");
-
-      const referredRes = await query(env, "users", "GET", null, `?referred_by=eq.${telegramId}&select=telegram_id`);
-      const referralCount = referredRes?.length || 0;
-
-      return await reply(
-`👤 <b>Your Profile</b>
-
-📛 Name: ${user.first_name || "Unknown"}
-🆔 ID: <code>${telegramId}</code>
-⭐ Points: ${user.points || 0}
-👥 Successful Referrals: ${referralCount}
-✅ Verified: ${user.is_verified ? "Yes" : "No"}`
-      );
-    }
-
-    if (data === "buy_points") {
-      const settingsRes = await query(env, "settings", "GET", null, "?id=eq.1");
-      const info = settingsRes?.[0]?.buy_points_info;
-
-      return await reply(
-        info || "💰 Buying points isn't set up yet. Tap below to contact the admin.",
-        {
-          inline_keyboard: [
-            [{ text: "📩 Contact Admin", callback_data: "contact_admin" }]
-          ]
-        }
-      );
-    }
-
-    if (data === "admin_set_buypoints") {
-      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
-
-      await setState(env, telegramId, "set_buypoints_info");
-      return await reply("💳 Send the text you want users to see when they tap 'Buy Points' (e.g. payment method + how to contact you):");
-    }
-
-    if (data.startsWith("togglepin_")) {
-      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
-
-      const fileId = data.replace("togglepin_", "");
-      const fileRes = await query(env, "files", "GET", null, `?id=eq.${fileId}`);
-      const file = fileRes?.[0];
-
-      if (!file) return await reply("❌ File not found.");
-
-      const newPinState = !file.is_pinned;
-      await query(env, "files", "PATCH", { is_pinned: newPinState }, `?id=eq.${fileId}`);
-
-      return await reply(newPinState ? "📌 File pinned to top of its category." : "📄 File unpinned.");
-    }
-
-    if (data === "admin_top_purchased") {
-      if (!isAdmin(env, telegramId)) return await reply("❌ Access denied");
-
-      const purchases = await query(env, "purchases", "GET", null, "?select=file_id");
-
-      if (!purchases?.length) return await reply("📊 No purchases recorded yet.");
-
-      const counts = {};
-      purchases.forEach(p => {
-        counts[p.file_id] = (counts[p.file_id] || 0) + 1;
-      });
-
-      const sortedIds = Object.keys(counts).sort((a, b) => counts[b] - counts[a]).slice(0, 10);
-
-      const filesRes = await query(env, "files", "GET", null, "?select=id,title");
-      const nameMap = {};
-      (filesRes || []).forEach(f => { nameMap[f.id] = f.title; });
-
-      let text = "🔥 <b>Top 10 Most Purchased Files</b>\n\n";
-      sortedIds.forEach((id, i) => {
-        text += `${i + 1}. ${nameMap[id] || "Unknown file"} — ${counts[id]} purchase(s)\n`;
       });
 
       return await reply(text);
