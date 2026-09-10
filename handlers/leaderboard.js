@@ -17,5 +17,9 @@ export async function leaderboardMenu(env, chatId) {
     });
   }
 
-  await sendMessage(env, chatId, text);
+  await sendMessage(env, chatId, text, {
+    inline_keyboard: [
+      [{ text: "👥 Top Referrers", callback_data: "referral_leaderboard" }]
+    ]
+  });
 }
