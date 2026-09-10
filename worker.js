@@ -558,13 +558,14 @@ export default {
         await clearState(env, userId);
 
         const keyword = text.trim();
+        const encoded = encodeURIComponent(keyword);
 
         const files = await query(
           env,
           "files",
           "GET",
           null,
-          `?title=ilike.*${encodeURIComponent(keyword)}*&limit=20`
+          `?or=(title.ilike.*${encoded}*,description.ilike.*${encoded}*)&limit=20`
         );
 
         if (!files?.length) {
