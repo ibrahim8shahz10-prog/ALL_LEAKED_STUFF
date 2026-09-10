@@ -1,25 +1,40 @@
-import { getLeaderboard } from "../services/leaderboard.js";
 import { sendMessage } from "../services/telegram.js";
+import { query } from "../database/supabase.js";
 
 export async function leaderboardMenu(env, chatId) {
-  const users = await getLeaderboard(env);
+  const allUsers = await query(
+    env,
+    "users",
+    "GET",
+    null,
+    "?select=telegram_id,first_name,referred_by"
+  );
 
-  let text = "🏆 <b>Top Users</b>\n\n";
+  const counts = {};
+  const nameMap = {};
 
-  if (!users.length) {
-    text += "No users found yet.";
+  (allUsers || []).forEach(u => {
+    nameMap[u.telegram_id] = u.first_name || "Anonymous";
+    if (u.referred_by) {
+      counts[u.referred_by] = (counts[u.referred_by] || 0) + 1;
+    }
+  });
+
+  const referrerIds = Object.keys(counts);
+
+  let text = "🏆 <b>Top 10 Referrers</b>\n━━━━━━━━━━━━━━━━\n\n";
+
+  if (referrerIds.length === 0) {
+    text += "No referrals yet.";
   } else {
+    const sorted = referrerIds.sort((a, b) => counts[b] - counts[a]).slice(0, 10);
     const medals = ["🥇", "🥈", "🥉"];
-    users.forEach((user, index) => {
-      const medal = medals[index] || `${index + 1}.`;
-      const name = user.first_name || "Anonymous";
-      text += `${medal} ${name} — ⭐ ${user.points || 0} points\n`;
+
+    sorted.forEach((id, i) => {
+      const medal = medals[i] || `${i + 1}.`;
+      text += `${medal} ${nameMap[id] || "Anonymous"} — ${counts[id]} referral(s)\n`;
     });
   }
 
-  await sendMessage(env, chatId, text, {
-    inline_keyboard: [
-      [{ text: "👥 Top Referrers", callback_data: "referral_leaderboard" }]
-    ]
-  });
+  await sendMessage(env, chatId, text);
 }
