@@ -8,7 +8,7 @@ export async function handleCategory(env, chatId, categoryId) {
     "files",
     "GET",
     null,
-    `?category_id=eq.${categoryId}&order=id.asc`
+    `?category_id=eq.${categoryId}&order=is_pinned.desc,id.asc`
   );
 
   if (!files.length) {
@@ -21,7 +21,7 @@ export async function handleCategory(env, chatId, categoryId) {
 
   const buttons = files.map(file => ([
     {
-      text: `📄 ${file.title} (${file.price} Points)`,
+      text: `${file.is_pinned ? "📌 " : "📄 "}${file.title} (${file.price} Points)`,
       callback_data: `file_${file.id}`
     }
   ]));
