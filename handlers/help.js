@@ -7,10 +7,11 @@ export async function helpMenu(env, chatId) {
 `ℹ️ <b>Help & Commands</b>
 
 📂 Browse — explore content
-⭐ Points — check your balance
+🔍 Search — find files by name or description
+👤 Profile — points, referral link & stats
+💰 Buy Points — get more points
 🎁 Daily Bonus — free points every 24h
-👥 Referral — invite friends & earn points
-🏆 Leaderboard — top point earners
+🏆 Leaderboard — top referrers
 
 <b>Commands</b>
 /start — open the main menu
