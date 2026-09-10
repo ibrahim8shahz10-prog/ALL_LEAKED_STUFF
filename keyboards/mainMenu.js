@@ -10,11 +10,7 @@ export function mainMenu() {
         { text: "💰 Buy Points", callback_data: "buy_points" }
       ],
       [
-        { text: "⭐ Points", callback_data: "points" },
-        { text: "🎁 Daily Bonus", callback_data: "daily" }
-      ],
-      [
-        { text: "👥 Referral", callback_data: "referral" },
+        { text: "🎁 Daily Bonus", callback_data: "daily" },
         { text: "🏆 Leaderboard", callback_data: "leaderboard" }
       ],
       [
